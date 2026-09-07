@@ -11,6 +11,7 @@
 | [devils-advocate](devils-advocate/SKILL.md) | 書き上がった文書の前提と設計判断に反論する | 報告のみ |
 | [grilling](grilling/SKILL.md) | 汎用の壁打ち。文書は残さない | なし |
 | [commit](commit/SKILL.md) | 変更を分析してコミットメッセージを組み立てる | コミット |
+| [create-pr](create-pr/SKILL.md) | 差分を自己レビューしPR本文を組み立てる | PR |
 
 ## 使う順番
 
@@ -24,6 +25,7 @@
             └─ /devils-advocate     … 書けた文書に反論させる
                  └─ 実装
                       └─ /commit          … 変更をコミットする
+                           └─ /create-pr  … 自己レビューしてPRを出す
 ```
 
 `/devils-advocate`は書いた直後より、**少し時間を置いてから**のほうが効く。書いた直後は前提が頭に残っていて、指摘を無意識に退けやすい。
