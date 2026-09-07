@@ -88,9 +88,14 @@ git ls-remote --heads origin <branch>
 ```bash
 npm run lint
 npm run build
+npm test
 ```
 
 いずれかが失敗したらPRを作らず、その内容を伝えて終了する。壊れた状態のPRを出さない。
+
+`npm test`は`package.json`に`test`スクリプトがある場合だけ実行する。無ければ飛ばし、PR本文の該当欄はチェックしない。
+
+E2Eは重いため既定では走らせない。Canvasの描画やファイルを開く操作に触れる変更のときだけ`npm run test:e2e`も実行する。
 
 差分がドキュメントや設定のみでアプリのコードを含まない場合も、両方を実行して壊れていないことを確認する。
 

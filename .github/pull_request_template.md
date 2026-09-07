@@ -26,6 +26,7 @@
 
 - [ ] `npm run build`が通る
 - [ ] `npm run lint`が通る
+- [ ] `npm test`が通る
 - [ ] 実際に動かして確認した
 
 ## ドキュメント更新

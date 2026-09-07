@@ -14,6 +14,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - TypeScript: [.claude/rules/typescript.md](.claude/rules/typescript.md)
 - React／Hooks・Canvas描画: [.claude/rules/react.md](.claude/rules/react.md)
+- テスト: [.claude/rules/testing.md](.claude/rules/testing.md)
 - ドキュメント・コメントの表記: [.claude/rules/documentation-style.md](.claude/rules/documentation-style.md)
 
 ## ドキュメント
