@@ -18,6 +18,15 @@
 - [仕様書テンプレート](design/template.md)
 - [ADRテンプレート](adr/template.md)・[ADRの書き方](adr/README.md)
 
+### 仕様書
+
+- [PSDビューア（最初のバージョン）](design/psd-viewer-v1.md)
+
+### ADR
+
+- [ADR-0001 PSDパーサにag-psdを使う](adr/0001-psd-parser.md)
+- [ADR-0002 描画モードはCanvas 2Dへ写せる16個だけ対応し、残りはnormalへ倒す](adr/0002-blend-mode-mapping.md)
+
 ## 書かないもの
 
 - 実装を読めばわかること。コードと二重管理になり、必ず片方が古くなる
