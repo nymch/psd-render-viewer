@@ -17,11 +17,68 @@ Reactコンポーネント、hooks、Canvas描画の書き方をまとめる。�
 
 | ディレクトリ | 置くもの |
 | --- | --- |
-| `app/` | ルーティング（`page.tsx`・`layout.tsx`・`route.ts`） |
-| `components/` | 共有UIコンポーネント |
+| `app/` | ルーティングのみ（`page.tsx`・`layout.tsx`・`route.ts`）。コンポーネントを置かない |
+| `components/` | Reactコンポーネント。機能ごとにサブディレクトリを切る（下記） |
 | `hooks/` | カスタムhook |
 | `atoms/` | Jotaiのatom |
 | `lib/` | fetcher、PSDパース、zodスキーマなど非Reactの処理 |
+
+## コンポーネントの配置
+
+コンポーネントは`components/`の下に、**機能ごとのサブディレクトリ**を作って格納する。
+
+```
+components/
+├─ ui/                    ← PSDを知らない汎用部品
+│  ├─ Button.tsx
+│  └─ Slider.tsx
+├─ layers/                ← 機能
+│  ├─ LayerPanel.tsx
+│  └─ LayerRow.tsx
+├─ viewer/
+│  └─ CanvasViewport.tsx
+└─ file-import/
+   └─ DropZone.tsx
+```
+
+### 機能ディレクトリ
+
+- 粒度は**画面上でまとまった役割を持つ単位**にする（`viewer`・`layers`・`toolbar`・`file-import`）。コンポーネント1つのために1ディレクトリを作らない
+- ディレクトリ名はkebab-case。複数の要素を扱う機能は複数形にする（`layers`）、単一の役割なら単数（`viewer`）
+- ファイル名はPascalCaseで、コンポーネント名と一致させる
+
+### `ui/`と機能ディレクトリの使い分け
+
+判定基準は**使われている数ではなく、PSDのドメインを知っているか**。
+
+- **`ui/`** — PSDを知らない汎用部品（ボタン・スライダー・ダイアログ）。どのプロジェクトへ持っていっても成立するもの
+- **機能ディレクトリ** — PSD固有のもの
+
+**PSD固有のコンポーネントが複数の機能から使われるようになっても、持ち主の機能に置いたまま他機能からimportする。**「2箇所以上で使うから移動する」という運用にすると、使われる数が変わるたびにファイルが動き、共有ディレクトリが無関係な部品の寄せ集めになる。
+
+### `app/`にコンポーネントを置かない
+
+`app/`は`page.tsx`・`layout.tsx`・`route.ts`だけにする。ページ専用に見えるコンポーネントも`components/`へ置く。`app/<route>/_components/`のような同居を許すと、「これはページ専用か」の判断が毎回発生し、共有したくなった時点で移動が要る。
+
+### barrel fileを作らない
+
+`index.ts`でのre-exportをしない。ファイルを直接importする。
+
+```typescript
+// Good
+import {LayerPanel} from "@/components/layers/LayerPanel";
+
+// Bad — barrel経由
+import {LayerPanel} from "@/components/layers";
+```
+
+barrelはツリーシェイキングを妨げ、循環参照の原因になる。ファイルを追加するたびの更新も要る。
+
+1ファイル1コンポーネントを原則とする。そのファイル内でしか使わない小さなサブコンポーネントは同居させてよい。
+
+### hooksとatomsは機能で割らない
+
+`hooks/`と`atoms/`は種類別のまま（`hooks/psdHooks.ts`・`atoms/layers.ts`）。機能で割るのは`components/`だけにする。
 
 ## コンポーネント
 
