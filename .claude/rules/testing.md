@@ -4,7 +4,7 @@ paths:
   - "**/*.test.tsx"
   - "e2e/**/*.spec.ts"
   - "test/**/*.ts"
-  - "vitest.config.ts"
+  - "vitest.config.mts"
   - "playwright.config.ts"
 ---
 
@@ -45,16 +45,22 @@ Canvasの描画はjsdomでは動かず、モックしても実際の描画結果
 - テスト名は日本語で、**何がどうなるか**を書く（`「グループの不透明度が子に掛け合わされる」`）。`「正しく動く」`のような名前にしない
 - 実データを使う。PSDのフィクスチャは`test/fixtures/`に置き、何を確かめるためのファイルかをコメントかREADMEに残す
 
+### 設定ファイルの拡張子
+
+**`vitest.config.mts`にする。`.ts`にしない。**`.ts`だとCommonJSとして読まれ、ESM構文を使っていることが警告になる。
+
+`tsconfig.json`の`paths`（`@/*`）はVite本体の`resolve.tsconfigPaths`で解決する。`vite-tsconfig-paths`は要らない。
+
 ### ag-psdのセットアップ
 
-**Nodeでは`initializeCanvas`を呼ばないと`readPsd`が例外を投げる。**`useImageData: true`を指定していても内部でcanvasを要求する。`test/setup.ts`でスタブを渡し、`vitest.config.ts`の`setupFiles`で読み込む。
+**Nodeでは`initializeCanvas`を呼ばないと`readPsd`が例外を投げる。**`useImageData: true`を指定していても内部でcanvasを要求する。`test/setup.ts`でスタブを渡し、`vitest.config.mts`の`setupFiles`で読み込む。
 
 ブラウザでは初期化は不要なので、このスタブはテスト専用のものとして扱う。
 
 ## E2E（Playwright）
 
 - `e2e/`に`*.spec.ts`で置く
-- **Vitestが`e2e/`を拾わないように`vitest.config.ts`で除外する。**Vitestは既定で`.spec.ts`も対象にするため、除外しないとPlaywrightのテストをVitestが実行して失敗する
+- **Vitestが`e2e/`を拾わないように`vitest.config.mts`で除外する。**Vitestは既定で`.spec.ts`も対象にするため、除外しないとPlaywrightのテストをVitestが実行して失敗する
 - 対象はCanvasの描画と、ファイルを開く操作。**単体テストで確かめられることをE2Eで書かない。**遅く、壊れやすいため
 - 検証はスクリーンショット比較よりも、まず「描画された」「レイヤー数が合っている」といった判定できる事実を見る
 
