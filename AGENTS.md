@@ -31,6 +31,17 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `/devils-advocate` — 書き上がった文書に反論する
 - `/grilling` — 汎用の壁打ち
 - `/commit` — 変更を分析してコミットする
+- `/create-pr` — 差分を自己レビューしてPRを作成する
+
+## ブランチ運用
+
+簡易版git-flow。`main`がリリース済み、`develop`が統合ブランチ（GitHubのデフォルト）。
+
+- `feature/*`・`fix/*`・`refactor/*`・`docs/*`・`chore/*` — `develop`から切り、`develop`へ戻す
+- `hotfix/*` — `main`から切り、`main`へ戻したあと`develop`にも取り込む
+- リリース — `develop`から`main`へPRを出す
+
+`release/*`ブランチは使わない。PRは`/create-pr`で作る。
 
 ## 技術スタック
 
