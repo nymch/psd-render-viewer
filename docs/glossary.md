@@ -72,7 +72,7 @@ const psd = readPsd(arrayBuffer, {
 
 | オプション | 既定 | 内容 |
 | --- | --- | --- |
-| `totalMemoryLimit` | 2GB | デコードに使うメモリの**累積**上限。レイヤーとマスクを1枚デコードするたびにそのバイト数が引かれ、残りが足りなくなると`Error("Exceeded memory limit")`を投げる。1枚あたりの上限ではないので、レイヤー数が多いPSDもここで止まる |
+| `totalMemoryLimit` | 2GB | デコードに使うメモリの**累積**上限。レイヤーとマスクを1枚デコードするたびにそのバイト数が引かれ、残りが足りなくなると`Error("Exceeded memory limit")`を投げる。1枚あたりの上限ではないので、レイヤー数が多いPSDもここで止まる。**このアプリは`lib/psd/parse.ts`で4GBを明示している**（100MB級のPSDが既定の2GBに当たったため）。`undefined`を明示的に渡すと上限そのものが外れる |
 | `throwForMissingFeatures` | `false` | ag-psd側が対応していない要素に当たったとき例外を投げる |
 | `logMissingFeatures` | `false` | 同じ状況をコンソールに出す |
 | `skipLayerImageData` | `false` | レイヤーのピクセルを読まない。ツリーだけ欲しいときに使う |
