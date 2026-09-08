@@ -25,7 +25,7 @@
 ### ADR
 
 - [ADR-0001 PSDパーサにag-psdを使う](adr/0001-psd-parser.md)
-- [ADR-0002 描画モードはCanvas 2Dへ写せる16個だけ対応し、残りはnormalへ倒す](adr/0002-blend-mode-mapping.md)
+- [ADR-0002 描画モードはCanvas 2Dへ写せる17個だけ対応し、残りはnormalへ倒す](adr/0002-blend-mode-mapping.md)
 
 ## 書かないもの
 

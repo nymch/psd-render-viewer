@@ -2,12 +2,11 @@ import {describe, expect, it} from "vitest";
 import type {BlendMode} from "ag-psd";
 import {resolveBlendMode} from "@/lib/psd/blendMode";
 
-// Canvas 2Dに対応する演算が無い11個（ADR-0002）
+// Canvas 2Dに対応する演算が無い10個（ADR-0002）
 const UNSUPPORTED: BlendMode[] = [
   "dissolve",
   "linear burn",
   "darker color",
-  "linear dodge",
   "lighter color",
   "vivid light",
   "linear light",
@@ -82,10 +81,18 @@ describe("resolveBlendMode", () => {
     });
   });
 
-  it("写せるモードは16個ある", () => {
+  it("写せるモードは17個ある", () => {
     const supported = ALL_BLEND_MODES.filter(
       (mode) => mode !== "pass through" && resolveBlendMode(mode).isSupported,
     );
-    expect(supported).toHaveLength(16);
+    expect(supported).toHaveLength(17);
+  });
+
+  it("linear dodgeは加算合成のlighterへ写す", () => {
+    // ブレンドモードではないが、下地が不透明なら覆い焼き(リニア)と一致する
+    expect(resolveBlendMode("linear dodge")).toEqual({
+      operation: "lighter",
+      isSupported: true,
+    });
   });
 });
