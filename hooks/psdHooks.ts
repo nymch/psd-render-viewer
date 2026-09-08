@@ -13,7 +13,6 @@ import {
 } from "@/lib/psd/limits";
 import {parsePsd} from "@/lib/psd/parse";
 import {buildLayerTree} from "@/lib/psd/tree";
-import type {PixelStore} from "@/lib/psd/tree";
 
 /**
  * `readPsd`は同期関数なので、状態を`parsing`にした直後に呼ぶとローディング表示が一度も塗られない。
@@ -49,7 +48,8 @@ export function usePsdDocument(
   const setDocument = useSetAtom(documentAtom);
   const setLayerTree = useSetAtom(layerTreeAtom);
 
-  const pixelsRef = useRef<PixelStore | null>(null);
+  // 表示中のドキュメント。描画のきっかけにする
+  const loaded = useAtomValue(documentAtom);
   const bitmapRef = useRef<ImageBitmap | null>(null);
 
   useEffect(() => {
@@ -97,8 +97,13 @@ export function usePsdDocument(
 
         // 前のファイルの資源を先に解放する
         bitmapRef.current?.close();
-        pixelsRef.current = pixels;
         bitmapRef.current = composited.transferToImageBitmap();
+        // transferToImageBitmapは同じ大きさの空のバッキングストアを残す
+        composited.width = 0;
+
+        // ピクセルはここで捨てる。このバージョンは再合成しないので、持っていても使い道が無い。
+        // 抱えたままにすると、次のファイルを読む間ずっと2ドキュメント分がメモリに載る。
+        pixels.clear();
 
         setLayerTree(nodes);
         setDocument({fileName: file.name, width: psd.width, height: psd.height});
@@ -116,7 +121,9 @@ export function usePsdDocument(
     };
   }, [attempt, setAttempt, setDocument, setLayerTree]);
 
-  // 合成結果をCanvasへ移す。Canvasの寸法が変わると中身が消えるため、描画はここにまとめる
+  // 合成結果をCanvasへ移す。Canvasの寸法が変わると中身が消えるため、描画はここにまとめる。
+  // 依存を付けないと再レンダーのたびにドキュメント大のdrawImageが走るので、
+  // 表示中のドキュメントが変わったときだけにする。
   useEffect(() => {
     const canvas = canvasRef.current;
     const bitmap = bitmapRef.current;
@@ -128,13 +135,12 @@ export function usePsdDocument(
     if (ctx === null) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(bitmap, 0, 0);
-  });
+  }, [loaded, canvasRef]);
 
   useEffect(() => {
     return () => {
       bitmapRef.current?.close();
       bitmapRef.current = null;
-      pixelsRef.current = null;
     };
   }, []);
 }
