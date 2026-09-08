@@ -72,7 +72,7 @@ const psd = readPsd(arrayBuffer, {
 
 | オプション | 既定 | 内容 |
 | --- | --- | --- |
-| `totalMemoryLimit` | 2GB | デコードに使うメモリの**累積**上限。レイヤーとマスクを1枚デコードするたびにそのバイト数が引かれ、残りが足りなくなると`Error("Exceeded memory limit")`を投げる。1枚あたりの上限ではないので、レイヤー数が多いPSDもここで止まる |
+| `totalMemoryLimit` | 2GB | デコードに使うメモリの**累積**上限。レイヤーとマスクを1枚デコードするたびにそのバイト数が引かれ、残りが足りなくなると`Error("Exceeded memory limit")`を投げる。1枚あたりの上限ではないので、レイヤー数が多いPSDもここで止まる。**このアプリは`lib/psd/parse.ts`で4GBを明示している**（100MB級のPSDが既定の2GBに当たったため）。`undefined`を明示的に渡すと上限そのものが外れる |
 | `throwForMissingFeatures` | `false` | ag-psd側が対応していない要素に当たったとき例外を投げる |
 | `logMissingFeatures` | `false` | 同じ状況をコンソールに出す |
 | `skipLayerImageData` | `false` | レイヤーのピクセルを読まない。ツリーだけ欲しいときに使う |
@@ -97,7 +97,7 @@ const psd = readPsd(arrayBuffer, {
 
 対してCanvas 2Dの`globalCompositeOperation`が持つブレンド系の演算は15個（`multiply`・`screen`・`overlay`・`darken`・`lighten`・`color-dodge`・`color-burn`・`hard-light`・`soft-light`・`difference`・`exclusion`・`hue`・`saturation`・`color`・`luminosity`）で、通常合成は`source-over`。
 
-28個から`pass through`（グループの構造の話で合成演算ではない）を除いた27個のうち、**名前が対応するのは16個、対応する演算が無いのが11個。**どう扱うかは[ADR-0002](adr/0002-blend-mode-mapping.md)で決めている。
+28個から`pass through`（グループの構造の話で合成演算ではない）を除いた27個のうち、**名前が対応するのは16個。**加えて`linear dodge`は名前こそ違うが加算合成の`lighter`で写せる（下地が不透明なら一致する）。**残る10個には対応する演算が無い。**どう扱うかは[ADR-0002](adr/0002-blend-mode-mapping.md)で決めている。
 
 ### レイヤーマスク
 

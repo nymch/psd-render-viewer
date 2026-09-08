@@ -29,10 +29,14 @@ const BLEND_MODE_MAP: Record<
   color: "color",
   luminosity: "luminosity",
 
+  // "lighter"はブレンドモードではなく加算合成だが、下地が不透明なら覆い焼き(リニア)と
+  // 完全に一致する（飽和・半透明のソースを含めて実測）。下地が半透明のときだけアルファも
+  // 加算されて本来より不透明になる。詳細はADR-0002。
+  "linear dodge": "lighter",
+
   dissolve: null,
   "linear burn": null,
   "darker color": null,
-  "linear dodge": null,
   "lighter color": null,
   "vivid light": null,
   "linear light": null,

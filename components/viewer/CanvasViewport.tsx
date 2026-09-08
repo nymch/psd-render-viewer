@@ -19,7 +19,7 @@ export function CanvasViewport() {
   usePsdDocument(canvasRef);
 
   return (
-    <div className="flex min-w-0 flex-1 items-start justify-center">
+    <div className="flex min-h-0 min-w-0 flex-1 items-start justify-center">
       <canvas
         ref={canvasRef}
         className={
@@ -34,11 +34,6 @@ export function CanvasViewport() {
       {loaded === null && attempt.status !== "parsing" && (
         <p className="self-center text-sm text-zinc-500">
           PSDファイルを選ぶか、ここへドロップする
-        </p>
-      )}
-      {attempt.status === "parsing" && (
-        <p className="self-center text-sm text-zinc-500">
-          {attempt.file.name}を読み込んでいる…
         </p>
       )}
     </div>

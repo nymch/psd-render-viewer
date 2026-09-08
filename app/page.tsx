@@ -4,6 +4,7 @@ import {LoadError} from "@/components/file-import/LoadError";
 import {LayerPanel} from "@/components/layers/LayerPanel";
 import {CanvasViewport} from "@/components/viewer/CanvasViewport";
 import {DocumentName} from "@/components/viewer/DocumentName";
+import {LoadingOverlay} from "@/components/viewer/LoadingOverlay";
 import {ZoomToggle} from "@/components/viewer/ZoomToggle";
 
 /**
@@ -12,7 +13,8 @@ import {ZoomToggle} from "@/components/viewer/ZoomToggle";
  */
 export default function Home() {
   return (
-    <div className="flex flex-1 flex-col">
+    // min-h-0が無いとflexの子がmin-height:autoのままで、内容に合わせて縦に伸びる
+    <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-center gap-3 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
         <FilePicker />
         <DocumentName />
@@ -21,11 +23,13 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      {/* スクロールしない領域。読み込み中のオーバーレイはここに重ねる */}
+      <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
         <LayerPanel />
         <DropZone>
           <CanvasViewport />
         </DropZone>
+        <LoadingOverlay />
       </div>
 
       <LoadError />

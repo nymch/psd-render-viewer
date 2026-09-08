@@ -3,7 +3,7 @@ status: proposed
 date: 2026-09-07
 ---
 
-# 描画モードはCanvas 2Dへ写せる16個だけ対応し、残りはnormalへ倒す
+# 描画モードはCanvas 2Dへ写せる17個だけ対応し、残りはnormalへ倒す
 
 ## 背景と課題
 
@@ -13,12 +13,13 @@ date: 2026-09-07
 
 `ag-psd`の`BlendMode`型は31個あるが、**PSDのレイヤーから実際に返るのは28個**（`node_modules/ag-psd/dist/helpers.js`の`toBlendMode`）。残る`linear height`・`height`・`subtraction`はディスクリプタ経由（レイヤー効果・ベクトルストローク）でしか出ないため、`layer.blendMode`には現れない。
 
-28個から`pass through`（グループの構造の話で合成演算ではない）を除いた27個のうち、Canvas 2Dの`globalCompositeOperation`に対応する演算があるのは16個。**残り11個には対応する演算が無い。**
+28個から`pass through`（グループの構造の話で合成演算ではない）を除いた27個のうち、Canvas 2Dの`globalCompositeOperation`に**同じ名前の演算があるのは16個**。残る11個をどうするかがここで決めることになる。
 
 | | 内訳 |
 | --- | --- |
-| 写せる16個 | `normal`・`darken`・`multiply`・`color burn`・`lighten`・`screen`・`color dodge`・`overlay`・`soft light`・`hard light`・`difference`・`exclusion`・`hue`・`saturation`・`color`・`luminosity` |
-| 写せない11個 | `dissolve`・`linear burn`・`darker color`・`linear dodge`・`lighter color`・`vivid light`・`linear light`・`pin light`・`hard mix`・`subtract`・`divide` |
+| 名前が対応する16個 | `normal`・`darken`・`multiply`・`color burn`・`lighten`・`screen`・`color dodge`・`overlay`・`soft light`・`hard light`・`difference`・`exclusion`・`hue`・`saturation`・`color`・`luminosity` |
+| 名前は違うが写せる1個 | `linear dodge` → `lighter`（後述） |
+| 写せない10個 | `dissolve`・`linear burn`・`darker color`・`lighter color`・`vivid light`・`linear light`・`pin light`・`hard mix`・`subtract`・`divide` |
 
 ## 判断基準
 
@@ -32,7 +33,7 @@ date: 2026-09-07
 
 ## 検討した選択肢
 
-- 写せる16個だけ`globalCompositeOperation`へ写し、残り11個は`normal`へ倒して未対応の印を出す
+- `globalCompositeOperation`へ写せるものだけ写し、残りは`normal`へ倒して未対応の印を出す
 - 16個に加えて、式が単純なもの（`linear burn`・`linear dodge`・`subtract`・`divide`等）を自前のピクセル演算で埋める
 - Canvasの合成演算を使わず、27個すべてを自前のピクセル演算で実装する
 - 今は決めない。v1はすべて`normal`扱いにし、対応表を次のバージョンへ回す
@@ -41,7 +42,7 @@ date: 2026-09-07
 
 ## 決定
 
-**写せる16個だけを`globalCompositeOperation`へ写し、残り11個は`normal`へ倒して未対応の印を出す。**
+**写せる17個を`globalCompositeOperation`へ写し、残り10個は`normal`へ倒して未対応の印を出す。**
 
 最優先の基準「一人で保守できるか」で他を明確に上回るため。対応表は`Record<BlendMode, GlobalCompositeOperation | null>`1つで済み、`composite.ts`の合成パイプラインは今のまま「レイヤーのバッファを親へ`drawImage`する」で変わらない。
 
@@ -51,22 +52,48 @@ date: 2026-09-07
 
 倒し先を`normal`にしたのは、**未対応を未対応のまま見せるため。**系統の近いモードへ倒すと見た目はPhotoshopに近づくが、差分を見たときに「倒し先の選び方が悪いのか合成がバグっているのか」の判別が要る。このバージョンの目的は「正しく表示されているか」を判断できることなので、判別のしやすさを取った。倒し先の選定根拠を自分で背負わずに済む点も、最優先の基準に沿う。
 
+### `linear dodge`を`lighter`へ写す
+
+**`lighter`はブレンドモードではなく加算合成（Porter-DuffのPLUS）だが、下地が不透明なら覆い焼き(リニア)と完全に一致する。**Chromeで実測した結果は次のとおり。
+
+| 条件 | 結果 |
+| --- | --- |
+| 下地・ソースとも不透明 | 色・アルファとも一致 |
+| 加算が255で飽和する組み合わせ | 一致 |
+| ソースが半透明（下地は不透明） | 一致 |
+| 下地が透明 | 一致 |
+| **下地が半透明** | **アルファも加算され、本来より不透明になる**（source-overなら191のところが255） |
+
+食い違うのは下地が半透明のときだけで、実際に効くのはグループ内で下のレイヤーが覆っていない領域とアンチエイリアスの縁。`normal`へ倒すと全面が間違うので、それより明確に近い。
+
+**この写し方は「系統の近いモードへ倒す」とは別物として扱う。**後者を退けたのは、差分を見たときに倒し先の選び方の問題か合成のバグかの判別が要るため。`lighter`は近似ではなく、条件付きで厳密に一致する。そのため未対応の印は出さない。大半のケースで一致するものに印を出すと、印そのものが無視されるようになる。
+
+同じ手が使える描画モードは他に無い。残り10個にはCanvas 2Dに対応する演算が存在しない。
+
 ### 結果
 
-- 良い点: 対応表が16行のデータ1つで済む。合成パイプラインが1系統のままで、`getImageData`による読み戻しが要らない。写せる16個は`globalCompositeOperation`の実装に乗るので、式を自分で検証しなくてよい
-- 良い点: 未対応が11個と確定するので、UIの印とTooltipに出す文言が具体的に書ける
-- 悪い点: **11個を使ったPSDはPhotoshopと絵が違う。**特に`linear dodge`（加算）と`linear burn`は光彩や影の表現で実際によく使われる。`normal`へ倒すと加算系は暗く、焼き込み系は明るく見える
+- 良い点: 対応表がデータ1つで済む。合成パイプラインが1系統のままで、`getImageData`による読み戻しが要らない。写せる17個は`globalCompositeOperation`の実装に乗るので、式を自分で検証しなくてよい
+- 良い点: 未対応が10個と確定するので、UIの印とTooltipに出す文言が具体的に書ける
+- 悪い点: **10個を使ったPSDはPhotoshopと絵が違う。**特に`linear burn`は影やコントラストを締める用途で使われ、`normal`へ倒すと明るく見える
 - 悪い点: 印は出るが差は残る。「未対応の印が付いているもの以外は一致する」という判定に、Photoshop側でも該当レイヤーを非表示にする手間が加わる
-- 悪い点: 11個のうち10個は式が単純で、やろうと思えば計算できる。**できるのにやらない**という判断なので、実用でつまずいたときに繰り返し再検討したくなる
+- 悪い点: 10個すべて式は単純で、やろうと思えば計算できる（`dissolve`のディザパターンを除く）。**できるのにやらない**という判断なので、実用でつまずいたときに繰り返し再検討したくなる
+- 悪い点: `linear dodge`は下地が半透明のとき本来より不透明になる。印を出さない方針にしたため、この差は画面上では区別が付かない
+
+### 確認済み
+
+実物のPSDをPhotoshopと見比べて確認した。
+
+- `soft light`と非分離モード（`hue`・`saturation`・`color`・`luminosity`）はPhotoshopと一致する。Canvas 2Dの実装が同じ式かは仕様上の保証が取れていなかったが、実物で問題が出なかった
+- 実用のPSDで最も当たるのは`linear dodge`だった。これが`lighter`を採る判断につながった
 
 ### 未確認
 
-- Canvas 2Dの`soft-light`がPhotoshopの「ソフトライト」と同じ式かを確認していない。W3Cの合成仕様に定義はあるが、Photoshopの実装と一致する保証は取れていない。**写せる16個の中にも見た目が合わないものがありうる**
-- `hue`・`saturation`・`color`・`luminosity`の非分離モードについても同様に未確認
-- 11個それぞれが実際のPSDでどれくらい使われるかを調べていない。「よく使われる」は一般的な印象に基づくもので、手持ちのPSDで数えていない
+- 残り10個それぞれが実際のPSDでどれくらい使われるかを数えていない。`linear burn`が「よく使われる」は一般的な印象に基づく
+- `linear dodge`の半透明な下地での差が、実物のPSDで目に見える大きさになるかを確かめていない
 
 ## 補足
 
-- 見直しの目安は、実用のPSDを開いて11個のいずれかに繰り返し当たったとき。そのときは2番目の選択肢（式が単純なものだけ自前で埋める）へ移る。移行時に書き直すのは`blendMode.ts`と`composite.ts`のレイヤー合成部分で、`tree.ts`とマスク処理には及ばない
+- 見直しの目安は、実用のPSDを開いて残り10個のいずれかに繰り返し当たったとき。そのときは2番目の選択肢（式が単純なものだけ自前で埋める）へ移る。移行時に書き直すのは`blendMode.ts`と`composite.ts`のレイヤー合成部分で、`tree.ts`とマスク処理には及ばない
+- **この見直しは一度発火している。**当初は`linear dodge`も`normal`へ倒していたが、実物のPSDで繰り返し当たったため見直した。その際に`lighter`という選択肢を最初の検討で見落としていたことが分かり、自前実装へ移らずに済んだ。次に当たったときも、まずCanvasの合成演算で代用できないかを確かめる
 - `pass through`は対応表に載せない。グループを分離するかどうかの分岐で、合成演算ではない。扱いは[仕様書](../design/psd-viewer-v1.md)の合成アルゴリズムを参照
 - 対応表の値が`null`のとき未対応として記録し、描画は`source-over`で続ける。この判定は`lib/`の純関数なので単体テストの対象になる（[テスト規約](../../.claude/rules/testing.md)）

@@ -107,7 +107,7 @@
 | PSDでない・壊れている | `readPsd`の例外を捕まえ、失敗したファイル名とエラー内容を下端に出す。**表示中のドキュメントは差し替えない**ので、前の描画とレイヤーパネルはそのまま残る |
 | 読み込み中に別のファイルを開こうとした | 受け付けない。`<input>`とドロップを読み込み中は無効にする |
 | ドキュメントサイズが上限超過 | 合成を始めずにエラー表示。**長辺と面積の両方を見る**（後述） |
-| ピクセルの総量が大きすぎる | `readPsd`が`Error("Exceeded memory limit")`を投げる。`ag-psd`の`totalMemoryLimit`（既定2GB）はレイヤーとマスクをデコードするたびに減っていく累積の予算なので、レイヤー数が多いPSDもここで止まる。このメッセージだけ「PSDが大きすぎて読み込めない」に読み替えて表示する |
+| ピクセルの総量が大きすぎる | `readPsd`が`Error("Exceeded memory limit")`を投げる。`totalMemoryLimit`はレイヤーとマスクをデコードするたびに減っていく累積の予算で、`parse.ts`で**4GB**を明示する（`ag-psd`の既定は2GBだが、100MB級のPSDがそこに当たって開けなかった）。このメッセージだけ「PSDが大きすぎて読み込めない」に読み替えて表示する |
 | 16bit・32bitのPSD | `imageData`が`ImageData`ではないため`putImageData`できない。ファイル単位でエラー表示にして開かない |
 | ピクセルを持たないレイヤー（調整レイヤー等） | 描画をスキップし、パネルには出す。未対応として印を付ける |
 | 対応する合成演算が無い描画モード | `normal`へフォールバックして描画を続ける。未対応として印を付ける |
@@ -209,18 +209,19 @@ DropZone           読み込みの試みを{status:"parsing", file}にする
 
 ### 描画モードの対応表
 
-方針は[ADR-0002](../adr/0002-blend-mode-mapping.md)で決めた。**Canvas 2Dの`globalCompositeOperation`へ写せる16個だけ対応し、残り11個は`normal`へ倒して未対応の印を出す。**自前のピクセル演算は入れない。
+方針は[ADR-0002](../adr/0002-blend-mode-mapping.md)で決めた。**Canvas 2Dの`globalCompositeOperation`へ写せる17個だけ対応し、残り10個は`normal`へ倒して未対応の印を出す。**自前のピクセル演算は入れない。
 
 `layer.blendMode`に実際に入りうるのは`ag-psd`の`toBlendMode`が返す28個。`pass through`はグループを分離するかどうかの分岐で合成演算ではないため、対応表には載せない。残る27個の内訳は次のとおり。
 
 | | 内訳 |
 | --- | --- |
-| 写せる16個 | `normal`・`darken`・`multiply`・`color burn`・`lighten`・`screen`・`color dodge`・`overlay`・`soft light`・`hard light`・`difference`・`exclusion`・`hue`・`saturation`・`color`・`luminosity` |
-| 写せない11個 | `dissolve`・`linear burn`・`darker color`・`linear dodge`・`lighter color`・`vivid light`・`linear light`・`pin light`・`hard mix`・`subtract`・`divide` |
+| 名前が対応する16個 | `normal`・`darken`・`multiply`・`color burn`・`lighten`・`screen`・`color dodge`・`overlay`・`soft light`・`hard light`・`difference`・`exclusion`・`hue`・`saturation`・`color`・`luminosity` |
+| 名前は違うが写せる1個 | `linear dodge` → `lighter`（加算合成。下地が不透明なら一致する） |
+| 写せない10個 | `dissolve`・`linear burn`・`darker color`・`lighter color`・`vivid light`・`linear light`・`pin light`・`hard mix`・`subtract`・`divide` |
 
 `blendMode.ts`は`Record<BlendMode, GlobalCompositeOperation | null>`を持ち、`null`のとき未対応として記録して`source-over`で描画を続ける。
 
-写せる16個も見た目が一致する保証は無い。`soft light`と非分離モード（`hue`・`saturation`・`color`・`luminosity`）がPhotoshopと同じ式かは確認しておらず、判明するのは段2の目視比較になる。
+`soft light`と非分離モード（`hue`・`saturation`・`color`・`luminosity`）は、実物のPSDでPhotoshopと一致することを確認済み。`linear dodge`は下地が半透明のときだけ本来より不透明になるが、印は出さない（判断はADR-0002）。
 
 ### 読み込み中の表示
 
