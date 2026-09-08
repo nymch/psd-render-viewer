@@ -38,8 +38,8 @@ export function DropZone({children}: DropZoneProps) {
       }}
       onDragLeave={() => setIsOver(false)}
       onDrop={handleDrop}
-      // min-w-0が無いとflexの子がmin-width:autoのままで、内容に合わせて広がりfitが効かない
-      className={`flex min-w-0 flex-1 overflow-auto p-4 ${
+      // min-w-0とmin-h-0が無いとflexの子がminサイズautoのままで、内容に合わせて広がりfitが効かない
+      className={`flex min-h-0 min-w-0 flex-1 overflow-auto p-4 ${
         isOver ? "bg-blue-50 dark:bg-blue-950" : ""
       }`}
     >
