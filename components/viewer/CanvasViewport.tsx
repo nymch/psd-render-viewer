@@ -19,7 +19,7 @@ export function CanvasViewport() {
   usePsdDocument(canvasRef);
 
   return (
-    <div className="flex min-w-0 flex-1 items-start justify-center">
+    <div className="flex min-h-0 min-w-0 flex-1 items-start justify-center">
       <canvas
         ref={canvasRef}
         className={
