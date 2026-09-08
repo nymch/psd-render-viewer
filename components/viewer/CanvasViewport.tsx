@@ -36,11 +36,6 @@ export function CanvasViewport() {
           PSDファイルを選ぶか、ここへドロップする
         </p>
       )}
-      {attempt.status === "parsing" && (
-        <p className="self-center text-sm text-zinc-500">
-          {attempt.file.name}を読み込んでいる…
-        </p>
-      )}
     </div>
   );
 }
