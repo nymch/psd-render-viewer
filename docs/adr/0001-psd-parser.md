@@ -3,71 +3,71 @@ status: accepted
 date: 2026-09-07
 ---
 
-# PSDパーサにag-psdを使う
+# Use ag-psd as the PSD parser
 
-## 背景と課題
+## Context
 
-ブラウザでPSDを読み、レイヤーツリーの表示とCanvasへの描画を行う。レイヤーごとの表示切替・不透明度・描画モードをUIから操作できることを前提とする。
+Read a PSD in the browser, show its layer tree, and draw it to a canvas. Per-layer visibility, opacity, and blend mode are to be operable from the UI.
 
-当初は`@webtoon/psd`を選び、実際に導入して検証した。その結果、**公開されているv0.4.0にはビューアの基本機能に必要なプロパティが存在しない**ことがわかったため、選定をやり直す。
+`@webtoon/psd` was picked first and taken as far as a working integration. That established that **the published v0.4.0 does not have the properties a basic viewer needs**, so the choice is being made again.
 
-## 検討した選択肢
+## Options considered
 
 - `@webtoon/psd` 0.4.0
 - `ag-psd` 31.0.2
-- 自前でPSDをパースする
+- Parse the PSD format directly
 
-## 判断基準
+## Decision criteria
 
-趣味の個人開発なので、次の順で優先する。
+This is a personal project, so the order is:
 
-1. **やりたいことができるか** — 描画モードとグループの表示切替は機能の中核で、後から足せない
-2. **開発が続いているか** — 一人で保守するため、ライブラリ側が止まると詰む
-3. **速度とサイズ** — 体感に影響する範囲でのみ考慮する
+1. **Whether it can do the job** — blend modes and per-group visibility are the core of the feature and cannot be bolted on later
+2. **Whether it is still being developed** — maintained by one person, so a stalled library is a dead end
+3. **Speed and size** — considered only where they affect how the app feels
 
-## 決定
+## Decision
 
-`ag-psd`を選ぶ。**`@webtoon/psd`では描画モードとグループの表示切替が実装できず、その状況が改善する見込みがないため。**
+`ag-psd` is chosen. **`@webtoon/psd` cannot implement blend modes or per-group visibility, and there is no sign of that changing.**
 
-同一のPSD（400×800・14レイヤー・293KB）で両者を実測した結果:
+Measured against the same PSD (400×800, 14 layers, 293KB):
 
 | | @webtoon/psd 0.4.0 | ag-psd 31.0.2 |
 | --- | --- | --- |
-| 速度 | parse 11.6ms + decode 6.0ms = 17.6ms | 25.9ms |
-| dist（gzip） | 30KB | 273KB |
-| `blendMode` | 取得不可（`undefined`） | `"normal"` |
-| グループの表示状態 | 取得不可（`Group`に`isHidden`が無い） | `hidden: false` |
-| `clipping` | 取得不可 | `false` |
-| `opacity` | 0〜255 | 0〜1（正規化済み） |
-| テキストレイヤー | — | 取得可 |
+| Speed | parse 11.6ms + decode 6.0ms = 17.6ms | 25.9ms |
+| dist (gzip) | 30KB | 273KB |
+| `blendMode` | Unavailable (`undefined`) | `"normal"` |
+| Group visibility | Unavailable (`Group` has no `isHidden`) | `hidden: false` |
+| `clipping` | Unavailable | `false` |
+| `opacity` | 0-255 | 0-1 (normalized) |
+| Text layers | — | Available |
 
-保守状況の差も大きい。
+The maintenance gap is just as wide.
 
 | | @webtoon/psd | ag-psd |
 | --- | --- | --- |
-| 最新リリース | 0.4.0 — 2023-06-27（3年2ヶ月前） | 31.0.2 — 2026-07-02（2ヶ月前） |
-| 最終コミット | 2024-02-05（2年7ヶ月前） | 2026-07-02 |
-| 未解決Issue | 45 | 53 |
+| Latest release | 0.4.0 — 2023-06-27 (3 years 2 months ago) | 31.0.2 — 2026-07-02 (2 months ago) |
+| Last commit | 2024-02-05 (2 years 7 months ago) | 2026-07-02 |
+| Open issues | 45 | 53 |
 
-`@webtoon/psd`のmainブランチには`blendMode`と`Group.isHidden`が存在するが、2年半リリースされていない。待つ判断は取らない。
+`@webtoon/psd`'s main branch does have `blendMode` and `Group.isHidden`, but nothing has been released in two and a half years. Waiting for it is not on the table.
 
-### 結果
+### Consequences
 
-- 良い点: 描画モード・グループの表示切替・クリッピング・テキストレイヤーが扱える。`opacity`が0〜1で返るため変換が要らない。ライブラリ側の更新が続いている
-- 悪い点: このPSDで8ms遅い。distがgzipで243KB大きい。読み込み専用の用途に対して書き込み機能も抱える
-- 悪い点: Node環境では`initializeCanvas`によるcanvasの初期化が要る（ブラウザでは不要）。テストやバッチ処理を書くときに引っかかる
+- Good: blend modes, per-group visibility, clipping, and text layers are all workable. `opacity` comes back as 0-1, so no conversion is needed. The library is still being updated
+- Bad: 8ms slower on this PSD. The dist is 243KB larger gzipped. It carries write support for what is a read-only use
+- Bad: outside the browser, canvas has to be initialized through `initializeCanvas`. It trips you up when writing tests or a batch script
 
-### 未確認
+### Unconfirmed
 
-数字は次の条件で測っている。判断を覆すほどではないが、前提が変わったら測り直す。
+The numbers were measured under these conditions. None of it is enough to overturn the decision, but re-measure if the premises change.
 
-- ag-psdのNode実測はcanvasのスタブを噛ませている。ブラウザ実行では数字が変わりうる
-- 273KBはツリーシェイキングなしのdist全体。書き込み機能を落とした実バンドルサイズは未測定
-- 計測は小さいPSD1件のみ。大きいファイルではWASMデコーダを持つ`@webtoon/psd`との速度差が開く可能性がある
+- The `ag-psd` figures were taken under Node with a canvas stub in place. Running in a browser may give different numbers
+- 273KB is the whole dist without tree shaking. The real bundle size with write support dropped has not been measured
+- Only one small PSD was measured. On large files the gap may widen in favor of `@webtoon/psd`, which has a WASM decoder
 
-## 補足
+## Notes
 
-- 却下した「自前実装」は、PSDの仕様が広大で個人開発の範囲を超えるため検討を打ち切った
-- `ag-psd`はMITライセンス
-- ag-psdの読み込みオプション`useImageData: true`で`ImageData`を直接受け取れる。`skipCompositeImageData`・`skipThumbnail`で不要な処理を省ける
-- 描画モードをCanvas 2Dの`globalCompositeOperation`にどこまで対応させるかは別途決める（Photoshopの全モードには対応する合成演算が無い）
+- "Parse it directly" was dropped early: the PSD format is vast enough to be beyond what a personal project can carry
+- `ag-psd` is MIT licensed
+- `ag-psd`'s `useImageData: true` hands back `ImageData` directly. `skipCompositeImageData` and `skipThumbnail` skip work that is not needed here
+- How far blend modes map onto Canvas 2D's `globalCompositeOperation` is decided separately — Photoshop has modes with no matching compositing operation

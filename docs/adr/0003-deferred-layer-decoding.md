@@ -3,152 +3,153 @@ status: proposed
 date: 2026-09-08
 ---
 
-# レイヤーの展開を1枚ずつに遅らせ、メモリの上限は同時に生きる量で見積もる
+# Decode layers one at a time, and budget memory by what is alive at once
 
-> **保留中。実装に入っていない。**書き上げた後の反論で、判断基準が観測された事象と噛み合っていないこと、より安い選択肢を見落としていたことが分かった。詳細は「反論を受けての保留」を参照。先に安い手を試し、残った症状に合わせて決め直す。
+> **On hold. Not implemented.** Arguing against the finished document showed that the decision criteria did not match the symptoms actually observed, and that a cheaper option had been missed. See "Put on hold after the counter-argument". Try the cheap fixes first, then decide again against whatever symptoms are left.
 
-## 背景と課題
+## Context
 
-100MB級のPSDを続けて開くと、動作が重くなり読み込み時に反応が無くなる状態が実際に起きた。
+Opening 100MB-class PSDs one after another really did make the app sluggish and unresponsive during loading.
 
-`ag-psd`は`readPsd`の時点で**全レイヤーを展開し、合成が終わるまで全部を保持する**。合成側（`lib/psd/composite.ts`）は1枚ずつ描いて即解放しているので倍率にはならないが、展開済みの山そのものが残る。
+`ag-psd` **decodes every layer at `readPsd` time and holds all of them until compositing finishes**. The compositing side (`lib/psd/composite.ts`) draws one at a time and frees as it goes, so it does not multiply, but the pile of decoded layers stays.
 
-原因の一部は既に直した。`hooks/psdHooks.ts`が展開済みピクセルを使い道なく保持し続けており、次のファイルを読む間ずっと2ドキュメント分がメモリに載っていた。これを捨てるようにして、2回目以降の読み込みピークは大きく下がった。
+Part of the cause is already fixed. `hooks/psdHooks.ts` was holding on to decoded pixels it had no further use for, which kept two documents' worth in memory for the whole time the next file was loading. Dropping them brought the peak on every load after the first down substantially.
 
-残るのは「1ドキュメント分の展開済みの山」で、これを減らすには展開そのものを遅らせるしかない。`ag-psd`は`useRawData: true`で展開を止め、`decodeLayerPixels`で1枚ずつ展開できる。
+What is left is the one document's worth of decoded pixels, and reducing that means deferring the decode itself. `ag-psd` can stop decoding with `useRawData: true` and then decode one layer at a time with `decodeLayerPixels`.
 
-ただし**この方法を採ると`totalMemoryLimit`（既定2GB）が効かなくなる**。展開が`decodeLayerPixels`経由になり、そこには予算が渡らないため。上限をどう持ち直すかがここで決めることになる。範囲は`lib/psd/parse.ts`・`tree.ts`・`composite.ts`・`limits.ts`。仕様は[PSDビューア（最初のバージョン）](../design/psd-viewer-v1.md)。
+The catch is that **taking that route disables `totalMemoryLimit`** (2GB by default), because decoding moves to `decodeLayerPixels`, which the budget is never handed to. How to hold a ceiling instead is what gets decided here. The scope is `lib/psd/parse.ts`, `tree.ts`, `composite.ts`, and `limits.ts`. The spec is [the PSD viewer's first version](../design/psd-viewer-v1.md).
 
-## 判断基準
+## Decision criteria
 
-「落とさないこと」を最優先する。開けないものは**きれいにエラーで止める**。タブが落ちると前に開いていたドキュメントまで失い、仕様の「失敗しても前の描画は消さない」という規則が活きない。
+"Do not crash" comes first. Anything that cannot be opened should **stop with a clean error**. A killed tab takes the previously open document with it, which makes the spec's rule that a failure leaves the previous render intact worthless.
 
-次点は開けるファイルを増やすこと。それ自体がこの変更の動機で、120MB超のPSDが現状では開けない。
+Second is opening more files. That is the motivation for the change in the first place — PSDs over 120MB cannot currently be opened.
 
-## 検討した選択肢
+## Options considered
 
-**遅延展開を採るかどうか**
+**Whether to defer decoding**
 
-- 展開を1枚ずつに遅らせる
-- 現状の一括展開のままにする
-- **`readPsd`に大きい`totalMemoryLimit`を渡す**（後から追加。下記を参照）
-- **合成をWeb Workerへ逃がす**（後から追加。下記を参照）
-- 手元のPSDを何枚か集計してから決める
+- Decode one layer at a time
+- Keep decoding everything up front
+- **Pass a larger `totalMemoryLimit` to `readPsd`** (added later, see below)
+- **Move compositing to a Web Worker** (added later, see below)
+- Survey a few PSDs on hand before deciding
 
-後ろ2つは書き上げた後の反論で出た。**最初の検討に入っていなかった。**
+The last two came out of arguing against the finished document. **Neither was in the original round.**
 
-`totalMemoryLimit`は`ReadOptions`にあり呼び出し側から渡せる（既定2GB、明示的に`undefined`を渡すと無効化）。**「120MB超が開けるようになる」という良い点は、1行のこの変更でも得られる。**遅延展開でなければ得られないものではない。
+`totalMemoryLimit` is in `ReadOptions` and can be passed by the caller (2GB by default; passing `undefined` explicitly disables it). **The benefit "PSDs over 120MB become openable" is available from that one-line change too.** It is not something only deferred decoding provides.
 
-Workerは「読み込み中に反応が無くなる」という症状に直接効く。遅延展開は合成にデコード時間が乗るだけで、固まる時間を減らさない。
+A worker acts directly on the "unresponsive while loading" symptom. Deferred decoding only moves decode time into compositing; it does not shorten the freeze.
 
-**上限の持ち方**
+**How to hold the ceiling**
 
-- 同時に生きる量を展開前に見積もって弾く
-- 展開後の合計を見積もって弾く（`totalMemoryLimit`と同じ意味を自前で再現する）
-- 上限を持たず、確保失敗を`try`／`catch`で拾う
+- Estimate what is alive at once, before decoding, and reject
+- Estimate the decoded total and reject (reproducing what `totalMemoryLimit` means, by hand)
+- Hold no ceiling and catch allocation failures with `try`/`catch`
 
-**予算を超えたときの挙動**
+**What to do when the budget is exceeded**
 
-- 開かずにエラー
-- 推定量を示して開くかどうかを利用者に決めさせる
-- 予算に収まる範囲でレイヤーを間引いて開く
+- Refuse to open, with an error
+- Show the estimate and let the user decide whether to open it
+- Open it with layers thinned out to fit the budget
 
-## 決定
+## Decision
 
-**展開を1枚ずつに遅らせる。上限は「同時に生きる量」を展開前に見積もって判定し、超えたら開かずにエラーにする。予算は式の値で1GB。**
+**Decode one layer at a time. Hold the ceiling by estimating what is alive at once, before decoding, and error out without opening when it is exceeded. The budget is 1GB as the formula measures it.**
 
-### 遅延展開を採る理由
+### Why deferred decoding
 
-実測で効果が確認できたため。50レイヤーがすべて全面のPSD（展開後572MB）では、読み込みピークが+1270MBから+352MBへ下がった。描画結果は現行と同一で、マスク・描画モード・グループの不透明度すべて一致した。
+Measurement bore it out. On a PSD of 50 full-canvas layers (572MB decoded), the load peak fell from +1270MB to +352MB. The rendered result was identical, with masks, blend modes, and group opacity all matching.
 
-あわせて`totalMemoryLimit`に当たっていた120MB超のPSDが開けるようになる。
+It also makes PSDs over 120MB, which were hitting `totalMemoryLimit`, openable.
 
-### 上限を「同時に生きる量」で見る理由
+### Why the ceiling watches what is alive at once
 
-**遅延展開では展開後の合計を同時に抱えない。**合計で判定すると、実際には開けるファイルを弾くことになる。これは安全側の失敗に見えて、最優先の基準（落とさないこと）ではなく別の失敗である。
+**Deferred decoding never holds the decoded total at once.** Judging on the total would reject files that in fact open. That looks like failing safe, but it is a different failure from the top criterion, not an instance of it.
 
-`useRawData: true`で読んだ時点でレイヤーの矩形は取得できる（実データで確認済み）。**メモリを使う前に量を判定できる**ため、`ag-psd`の逐次的な予算消費より早い段階で止められる。
+Layer rectangles are available as soon as the file is read with `useRawData: true` (confirmed against real data). **The size can be judged before any memory is spent**, which stops things earlier than `ag-psd`'s incremental budget does.
 
-「確保失敗を拾う」案は退けた。ブラウザのメモリ不足は例外にならずタブごと落ちることがあり、最優先の基準を果たせない。**ただしこの案には正当な言い分がある。**閾値は結局こちらの当て推量で、同じPSDでも空きメモリ次第で結果が変わるのに、固定値はそれを知らない。この弱点は後述の「未確認」に引き継ぐ。
+"Catch allocation failures" was rejected: running out of memory in a browser does not always raise — it can take the tab down — which fails the top criterion. **The option has a fair point, though.** The threshold is guesswork either way, and the same PSD behaves differently depending on free memory, which a fixed number knows nothing about. That weakness carries forward into "Unconfirmed" below.
 
-### 見積もりの式
+### The estimation formula
 
-`composite.ts`の実装に合わせて計算する。
+Computed to match what `composite.ts` actually does.
 
 ```
-圧縮データ（ファイルサイズ相当）
-  + 分離グループのバッファ（根から葉への経路ごとの合計の最大値。範囲は子孫の和集合をドキュメントで切ったもの）
-  + 展開済みの最大1枚
-  + ドキュメント1枚分 × 2（ルートのバッファ兼ImageBitmap・表示用Canvas）
+compressed data (roughly the file size)
+  + isolated group buffers (the largest total along any root-to-leaf path;
+    each one covers the union of its descendants, clipped to the document)
+  + the largest single decoded layer
+  + one document's worth × 2 (the root buffer doubling as the ImageBitmap, and the display canvas)
 ```
 
-**ルートのバッファとImageBitmapは同時に生きない。**`transferToImageBitmap`はコピーではなく転送で、実測でも転送後の元Canvasは`[0,0,0,0]`になり中身がImageBitmapへ移った。当初この式を×3と書いていたが、1枚分の過大だった。実データの見積もりは465MBではなく**407MB**。
+**The root buffer and the ImageBitmap are not alive at the same time.** `transferToImageBitmap` transfers rather than copies; measured, the source canvas reads `[0,0,0,0]` afterwards, its contents having moved into the ImageBitmap. The formula originally said × 3, one document too many. The estimate for real data is **407MB**, not 465MB.
 
-**グループのバッファをドキュメント面積×段数で見てはいけない。**実データ（4200×3600、グループ17・最大7段）で、素朴な計算では404MBだが実装どおりに計算すると120MBだった。3.4倍の過大評価になり、開けるファイルを弾く側へ倒れる。
+**Group buffers must not be measured as document area × depth.** On real data (4200×3600, 17 groups, 7 levels at most) the naive figure is 404MB where computing what the implementation does gives 120MB. A 3.4× overestimate, falling on the side of rejecting files that would open.
 
-### 予算を1GBにする理由
+### Why the budget is 1GB
 
-実データの見積もりが407MBで、2倍以上の余裕を持って通る。500MBだと余裕が93MBしかなく、レイヤーを少し足しただけで開けなくなる。
+The estimate for real data is 407MB, which clears it with more than 2× of headroom. At 500MB the headroom is only 93MB, and a few more layers would make the file unopenable.
 
-式の精度が粗い（後述）以上、ぎりぎりの値に意味は無い。**度外れなファイルを止める役割に徹する。**
+Given how coarse the formula is (below), a tight number means nothing. **Its job is to stop outrageous files, nothing more.**
 
-### 結果
+### Consequences
 
-- 良い点: 100MB級のPSDで読み込みピークが下がる。実データでは約230MBの削減
-- 良い点: `totalMemoryLimit`に当たっていた120MB超のPSDが開けるようになる
-- 良い点: 判定がメモリを使う前に済む。`ag-psd`の逐次的な予算消費と違い、確保してから気づくことがない
-- 良い点: 見積もりは`lib/`の純関数になるので単体テストで確かめられる
-- 悪い点: **`totalMemoryLimit`という保険を手放す。**合計を見ていた受け皿が消え、自前の見積もりだけが頼りになる。式が外れたときに何も止めない
-- 悪い点: **式の値と実測RSSが合わない。**実測は式の2〜6倍で、倍率も安定しない。1GBという値は「RSSが何GBになるか」を言い当てていない
-- 悪い点: **実データでの効きは1.5分の1程度**で、合成PSDで見た3.6分の1ほどではない。構造を3ファイルにまたがって変える割に得が小さい
-- 悪い点: 合成にデコード時間が乗る。総量は変わらないが、パースが速く合成が遅くなり、進捗の見え方が変わる
-- 悪い点: `ag-psd`のLayerオブジェクトを書き換えて展開結果を捨てる実装になる。ライブラリの内部状態に踏み込む
+- Good: the load peak drops on 100MB-class PSDs. About 230MB less on real data
+- Good: PSDs over 120MB, which were hitting `totalMemoryLimit`, become openable
+- Good: the check happens before memory is spent. Unlike `ag-psd`'s incremental budget, nothing is discovered only after allocating
+- Good: the estimate is a pure function in `lib/`, so it can be unit tested
+- Bad: **it gives up `totalMemoryLimit` as a safety net.** The backstop that watched the total is gone, leaving only the hand-written estimate. Nothing stops anything if the formula is wrong
+- Bad: **the formula's number and measured RSS do not agree.** RSS measures 2-6× the formula, and the ratio is not stable. 1GB does not predict what RSS will be in gigabytes
+- Bad: **the effect on real data is only about 1.5×**, nowhere near the 3.6× seen on a synthetic PSD. That is a small return for a change that reaches across three files
+- Bad: decode time moves into compositing. The total is unchanged, but parsing gets faster and compositing slower, which changes how progress appears
+- Bad: the implementation mutates `ag-psd`'s Layer objects to discard decoded results. It reaches into the library's internal state
 
-### 未確認
+### Unconfirmed
 
-- **式と実測RSSの倍率が2〜6倍で安定しない理由を特定していない。**アロケータの挙動、デコード時の一時領域、RSSが解放済みメモリを含むことなどが考えられるが、切り分けていない。予算の値を根拠のあるものにするには、この倍率の性質を掴む必要がある
-- 実データは1枚しか集計していない。全面レイヤーが46枚中1枚という構成がどれくらい一般的かは分からない。**削減幅はファイルの作り方に強く依存する**
-- 閾値は利用者の空きメモリを知らない。`navigator.deviceMemory`は粗く、実際の空き容量とは別物。同じPSDが環境によって開けたり落ちたりする状況は残る
-- 遅延展開にしたとき、レイヤーを1枚ずつ展開する経路で`ag-psd`が別の上限を持つかを確認していない
+- **Why the ratio between the formula and measured RSS sits anywhere from 2× to 6× has not been pinned down.** Allocator behavior, scratch space during decoding, and RSS counting freed memory are all candidates, but none has been isolated. Making the budget number defensible requires understanding that ratio
+- Only one real file has been surveyed. How typical it is for 1 layer in 46 to be full-canvas is unknown. **The size of the saving depends heavily on how the file was made**
+- The threshold knows nothing about the user's free memory. `navigator.deviceMemory` is coarse and is not the same as what is actually available. The same PSD opening on one machine and crashing on another remains possible
+- Whether `ag-psd` applies some other ceiling along the one-layer-at-a-time decode path has not been checked
 
-## 反論を受けての保留
+## Put on hold after the counter-argument
 
-書き上げた後に[devils-advocate](../../.claude/skills/devils-advocate/SKILL.md)をかけ、決定の土台に問題が見つかったため保留にした。
+Running [devils-advocate](../../.claude/skills/devils-advocate/SKILL.md) over the finished document found problems in what the decision rests on, so it is on hold.
 
-### 判断基準が観測された事象と噛み合っていない
+### The criteria do not match what was observed
 
-最優先を「落とさないこと」にした理由は「タブが落ちると前のドキュメントまで失う」だが、**タブが落ちた事実は報告にも計測にも無い。**実際に起きたのは次の3つ。
+"Do not crash" was made the top criterion because "a killed tab takes the previous document with it" — but **there is no report or measurement of a tab being killed.** What actually happened was these three:
 
-| | 症状 | 効く手 | 状況 |
+| | Symptom | What helps | Status |
 | --- | --- | --- | --- |
-| A | 繰り返し読むと劣化していく | メモリを減らす | `pixelsRef`の修正で対処済みの可能性が高い |
-| B | 1回ごとの読み込みで固まる | Worker | 未対処。**遅延展開では減らない** |
-| C | 120MB超が開けない | `totalMemoryLimit`を上げる | 未対処。1行で解ける |
+| A | Degrades as loads repeat | Use less memory | Very likely handled by the `pixelsRef` fix |
+| B | Freezes on every individual load | A worker | Unhandled. **Deferred decoding does not reduce it** |
+| C | Over 120MB will not open | Raise `totalMemoryLimit` | Unhandled. One line solves it |
 
-Aが「繰り返していると劣化する」形だったのが手がかりになる。固まる時間が一定なら1回目と8回目で体感は変わらないはずで、劣化するのはメモリ圧の性質。前後2ドキュメント分を抱えていた不具合はまさにそれで、既に直している。
+That A took the form "it degrades as you repeat it" is the clue. If the freeze were a constant length, the first load and the eighth would feel the same; degradation is what memory pressure looks like. Holding two documents' worth across a load was exactly that, and it is already fixed.
 
-**この決定はAにしか効かず、そのAは既に手当て済みかもしれない。**基準を実態へ合わせ直すと、第一候補はWorker（B）と`totalMemoryLimit`（C）になる。
+**This decision only helps A, and A may already be handled.** Realigning the criteria with the facts puts the worker (B) and `totalMemoryLimit` (C) first instead.
 
-### 式が性質の違うメモリを足している
+### The formula adds up memory of different kinds
 
-見積もり式は展開済みピクセル（型付き配列）とCanvasのバイト数を同じ資源として合計している。しかし**8192×4096（128MB相当）のCanvasを作って塗りつぶしてもRSSは9MBしか増えなかった。**Canvasのバッキングストアは型付き配列と同じようには現れない。
+The estimate sums decoded pixels (typed arrays) and canvas bytes as if they were the same resource. But **creating an 8192×4096 canvas (128MB worth) and filling it raised RSS by only 9MB.** A canvas's backing store does not show up the way a typed array does.
 
-これまでのRSS計測は主に展開済みピクセルを捉えていたことになり、式のうちCanvas側の項は実測で裏を取れていない。**式の妥当性は片側しか確かめられていない。**
+That means the RSS measurements so far were mostly catching decoded pixels, and the canvas terms of the formula have no measurement behind them. **Only one side of the formula has been checked.**
 
-### 「保留してデータを集める」を退けた理由が無かった
+### There was no reason given for rejecting "hold off and gather data"
 
-選択肢に挙げながら、決定にこれを選ばなかった理由を書いていなかった。一方で未確認には「実データは1枚しか集計していない」とある。**足りないと認めつつ集める案を退けるのは筋が通らない。**集計はメタデータのみで安全にでき、実際に数分で終わった。
+It was listed as an option, but no reason was written for not choosing it — while "Unconfirmed" says only one real file has been surveyed. **Admitting the data is thin while rejecting the option to gather more does not hold together.** Surveying can be done safely from metadata alone, and in the event it took a few minutes.
 
-### 撤退コスト
+### Cost of backing out
 
-`parse.ts`・`tree.ts`・`composite.ts`・`limits.ts`の4ファイルに加え、仕様書の異常系にも及ぶ。`tree.ts`は`PixelStore`の中身を`PixelSource`から`Layer`へ変えるため、戻すには型から書き直すことになる。
+Four files — `parse.ts`, `tree.ts`, `composite.ts`, `limits.ts` — plus the spec's failure-case section. `tree.ts` changes what `PixelStore` holds from `PixelSource` to `Layer`, so backing out means rewriting from the types down.
 
-### `ag-psd`のバージョンが固定されていない
+### The `ag-psd` version is not pinned
 
-この決定は`decodeLayerPixels`が予算を受け取らないこと、`delete layer.rawData`のタイミング、`useRawData`のセマンティクスに乗っている。いずれもドキュメント化された契約ではなく実装を読んで得た事実。`package.json`は`^31.0.2`でマイナー更新を許しているため、**上限が静かに効かなくなる形で壊れうる。**採用するならバージョンを固定するか、上限が効いていることをテストで押さえる。
+This decision rests on `decodeLayerPixels` not receiving a budget, on the timing of `delete layer.rawData`, and on the semantics of `useRawData`. None of those is a documented contract; all were read out of the implementation. `package.json` allows minor updates with `^31.0.2`, so **it can break in a way that silently disables the ceiling.** Adopting it means either pinning the version or holding the ceiling down with a test.
 
-## 補足
+## Notes
 
-- 見直しの目安は、予算に当たって開けないファイルが出たとき、または予算内なのに落ちたとき。前者なら式が過大、後者なら過小で、どちらも倍率の問題に行き着く
-- この決定は[ADR-0001](0001-psd-parser.md)を覆さない。`ag-psd`の採用はそのままで、読み込みオプションの使い方だけを変える
-- 実装後は仕様書の異常系を書き直す必要がある。「ピクセルの総量が大きすぎる」の行は`totalMemoryLimit`の挙動を前提にしており、そのままでは嘘になる
+- Revisit when a file hits the budget and will not open, or when something inside the budget crashes anyway. The first means the formula overestimates, the second that it underestimates, and both lead back to the ratio problem
+- This decision does not overturn [ADR-0001](0001-psd-parser.md). `ag-psd` stays; only how its read options are used changes
+- Implementing it would require rewriting the spec's failure cases. The row about "too many pixels in total" assumes `totalMemoryLimit`'s behavior and would become untrue as written

@@ -1,39 +1,39 @@
 # docs
 
-このリポジトリのドキュメント置き場。表記ルールは[.claude/rules/documentation-style.md](../.claude/rules/documentation-style.md)に従う。
+Where this repository's documentation lives. Notation follows [.claude/rules/documentation-style.md](../.claude/rules/documentation-style.md).
 
-## 置き場所
+## Where things go
 
-| ディレクトリ | 何を書くか | いつ書くか |
+| Directory | What goes in it | When to write it |
 | --- | --- | --- |
-| `design/` | これから作る機能の仕様書。何を作るか、どう動くか | 実装を始める前 |
-| `adr/` | 技術的な決定の記録。何を選び、なぜ選んだか | 後から「なぜこうなっているのか」を思い出したくなりそうな判断をしたとき |
-| `glossary.md` | 用語集。日本語表記とコード上の識別子の対応 | 用語がブレそうになったとき |
-| `ag-psd-notes.md` | `ag-psd`を実際に動かして確かめた挙動。導入中のバージョンに紐づく | ライブラリの挙動が型定義と食い違ったとき |
+| `design/` | The spec for a feature yet to be built: what it is and how it behaves | Before implementation starts |
+| `adr/` | The record of a technical decision: what was chosen, and why | On a judgment call you will later want to remember the reason for |
+| `glossary.md` | Terms: the word for each concept, what the app shows users in Japanese, and the identifier in code | When a term looks like it is about to drift |
+| `ag-psd-notes.md` | How `ag-psd` behaves in practice, established by running it. Tied to the installed version | When the library's behavior contradicts its type definitions |
 
-書く文書の性格で分ける。**やり方**（手順）と**仕組み**（なぜそうなっているか）を1つの文書に混ぜない。手順書が必要になったら`runbooks/`、実装済みのシステムの構造をまとめたくなったら`architecture/`を作る。先に空のディレクトリを用意しない。
+Split by what a document is for. **How** (a procedure) and **why** (how something came to be) do not go in one document. When a procedure is needed, create `runbooks/`; when the structure of a built system is worth writing down, create `architecture/`. Do not create an empty directory ahead of its contents.
 
-## 索引
+## Index
 
-- [用語集](glossary.md)
-- [ag-psdの実API](ag-psd-notes.md)
-- [仕様書テンプレート](design/template.md)
-- [ADRテンプレート](adr/template.md)・[ADRの書き方](adr/README.md)
+- [Glossary](glossary.md)
+- [ag-psd notes](ag-psd-notes.md)
+- [Spec template](design/template.md)
+- [ADR template](adr/template.md), [how to write an ADR](adr/README.md)
 
-### 仕様書
+### Specs
 
-- [PSDビューア（最初のバージョン）](design/psd-viewer-v1.md)
+- [PSD viewer (first version)](design/psd-viewer-v1.md)
 
-### ADR
+### ADRs
 
-- [ADR-0001 PSDパーサにag-psdを使う](adr/0001-psd-parser.md)
-- [ADR-0002 描画モードはCanvas 2Dへ写せる17個だけ対応し、残りはnormalへ倒す](adr/0002-blend-mode-mapping.md)
-- [ADR-0003 レイヤーの展開を1枚ずつに遅らせ、メモリの上限は同時に生きる量で見積もる](adr/0003-deferred-layer-decoding.md)（**保留中**）
-- [ADR-0004 パースと合成をWeb Workerへ逃がし、Workerは読み込みごとに使い捨てる](adr/0004-worker-offloading.md)
+- [ADR-0001 Use ag-psd as the PSD parser](adr/0001-psd-parser.md)
+- [ADR-0002 Support the 17 blend modes Canvas 2D can express and fall back to normal for the rest](adr/0002-blend-mode-mapping.md)
+- [ADR-0003 Decode layers one at a time, and budget memory by what is alive at once](adr/0003-deferred-layer-decoding.md) (**proposed**)
+- [ADR-0004 Move parsing and compositing into a Web Worker, and throw the worker away after each load](adr/0004-worker-offloading.md)
 - [ADR-0005 Write everything committed to the repository in English, and localize the UI separately](adr/0005-repository-language.md)
 - [ADR-0006 Split the verified `ag-psd` behavior out of the glossary into its own document](adr/0006-split-glossary.md)
 
-## 書かないもの
+## What does not go here
 
-- 実装を読めばわかること。コードと二重管理になり、必ず片方が古くなる
-- その場限りの作業ログ。残す価値のある判断だけADRに落とす
+- Anything the implementation already says. It duplicates the code, and one of the two always goes stale
+- A working log for its own sake. Only a judgment worth keeping goes into an ADR

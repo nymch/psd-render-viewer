@@ -1,150 +1,151 @@
-# PSDビューア（最初のバージョン）
+# PSD viewer (first version)
 
-## 概要
+## Overview
 
-ローカルのPSDファイルを開き、`ag-psd`でパースしたレイヤーをCanvas 2Dへ合成・描画する。あわせて読み取り専用のレイヤーパネルにレイヤーツリーを表示する。編集操作は持たない。
+Open a local PSD file, composite the layers `ag-psd` parses onto a Canvas 2D, and draw them. Alongside that, show the layer tree in a read-only layer panel. There are no editing operations.
 
-## 背景
+## Background
 
-`ag-psd`の採用は[ADR-0001](../adr/0001-psd-parser.md)で決めたが、描画するコードはまだ無い。現状は`app/psd-check/page.tsx`でパースが通ることを確認しているだけで、Canvasには何も描いていない。
+[ADR-0001](../adr/0001-psd-parser.md) settled on `ag-psd`, but no rendering code exists yet. As it stands, `app/psd-check/page.tsx` only confirms that parsing succeeds; nothing is drawn to a canvas.
 
-[ag-psdの実API](../ag-psd-notes.md)にまとめた罠——`children[0]`が最背面であること、グループの不透明度が子に継承されないこと、`hidden`の意味が反転していること——は、間違えても「なんとなく違う絵」にしかならない。実物を描いて初めて判定できる。まずそこを通す。
+The traps collected in [the ag-psd notes](../ag-psd-notes.md) — `children[0]` being the backmost layer, group opacity not being inherited by children, `hidden` meaning the opposite of what it reads like — all produce nothing worse than a picture that looks vaguely wrong. Only drawing something real tells you. That comes first.
 
-## ゴール
+## Goals
 
-- ローカルのPSDを開くと、全レイヤーが元のPSDと同じ重ね順でCanvasに描画される
-- 描画モード・レイヤーマスク・クリッピングマスク・グループの不透明度が絵に反映される
-- レイヤーパネルにレイヤーツリーが表示され、名前・不透明度・描画モード・表示状態が読める
-- 描画できない要素・見た目が合わない要素があるとき、それがどのノードで何が未対応なのかがUI上で分かる
+- Opening a local PSD draws every layer to the canvas in the same stacking order as the original
+- Blend modes, layer masks, clipping masks, and group opacity are reflected in the picture
+- The layer panel shows the layer tree, with name, opacity, blend mode, and visibility readable
+- Where an element cannot be drawn or does not match, the UI says which node it is and what is unsupported
 
-## やらないこと
+## Out of scope
 
-- 編集操作（表示切替・不透明度変更・並び替え・リネーム）。レイヤーパネルは読み取り専用
-- ズーム・パン。表示倍率はfitと100%のトグルだけ
-- 調整レイヤーの効果適用
-- レイヤー効果（ドロップシャドウ・境界線等）の再現
-- 画像の書き出し
-- 複数ファイルを同時に開くこと、アートボード
-- PlaywrightによるE2E
+- Editing (toggling visibility, changing opacity, reordering, renaming). The layer panel is read-only
+- Zoom and pan. Scale is a toggle between fit and 100%
+- Applying adjustment layer effects
+- Reproducing layer effects (drop shadow, stroke, and so on)
+- Exporting an image
+- Opening several files at once, and artboards
+- E2E with Playwright
 
-## 仕様
+## Specification
 
-### 操作と画面
+**Strings in this document's mock-ups and examples are written in English.** What the app renders is Japanese, per [ADR-0005](../adr/0005-repository-language.md); the wording lives in the [glossary](../glossary.md)'s Japanese column.
 
-1画面で完結する。左にレイヤーパネル、右にCanvas。
+### Interaction and screen
+
+Everything fits on one screen: layer panel on the left, canvas on the right.
 
 ```
-┌──────────────────────────────────────────────┐
-│ [ファイルを選択] sample.psd    [fit] [100%]   │
-├─────────────────┬────────────────────────────┤
-│ レイヤー  未対応3件│                            │
-│ ───────────────  │                            │
-│ ▼ グループA  100%│     ┌───────────────┐      │
-│     レイヤー2 乗算│     │               │      │
-│     レイヤー1  ⚠ │     │    Canvas     │      │
-│ 背景         100%│     │               │      │
-│                 │     └───────────────┘      │
-├─────────────────┴────────────────────────────┤
-│ ⚠ broken.psdを読み込めなかった: <理由>        │
-└──────────────────────────────────────────────┘
+┌────────────────────────────────────────────────┐
+│ [Choose file] sample.psd          [fit] [100%] │
+├──────────────────────┬─────────────────────────┤
+│ Layers  3 unsupported│                         │
+│ ─────────────────────│                         │
+│ ▼ Group A       100% │   ┌───────────────┐     │
+│     Layer 2 multiply │   │               │     │
+│     Layer 1        ⚠ │   │    Canvas     │     │
+│ Background      100% │   └───────────────┘     │
+├──────────────────────┴─────────────────────────┤
+│ ⚠ Could not read broken.psd: <reason>          │
+└────────────────────────────────────────────────┘
 ```
 
-ツールバーのファイル名は**表示中のドキュメント**のもの、下端のエラーは**最後に開こうとしたファイル**のもの。この2つは食い違いうるので、どちらも常にファイル名を添えて出す。エラーが無いときは下端の行を出さない。
+The filename in the toolbar belongs to **the document on display**; the error along the bottom belongs to **the file most recently attempted**. Those two can disagree, so both always carry a filename. When there is no error, the bottom line is not shown.
 
-操作は次の3つだけ。
+There are exactly three operations.
 
-1. **ファイルを開く** — `<input type="file">`で選ぶか、Canvas領域へドラッグ&ドロップする。開くとパース・合成・描画が走り、レイヤーパネルが埋まる。**読み込み中も受け付け、差し替える**（後述）
-2. **表示倍率の切り替え** — fitはビューポートに収まるよう縮小表示する（拡大はしない）。100%は等倍で、収まらない分は`overflow: auto`でスクロールする。**Canvasは常にドキュメントサイズの等倍で描き、CSSの表示サイズだけを変える。**再描画は起きない
-3. **未対応の理由を見る** — パネル行の印にhoverするとTooltipで理由が出る
+1. **Open a file** — pick it with `<input type="file">` or drag and drop onto the canvas area. Opening runs parsing, compositing, and drawing, and fills the layer panel. **A load is accepted while another is running, and replaces it** (below)
+2. **Switch scale** — fit shrinks the document to fit the viewport, never enlarging it. 100% is actual size, with `overflow: auto` scrolling whatever does not fit. **The canvas is always drawn at document size; only the CSS display size changes.** Nothing is redrawn
+3. **See why something is unsupported** — hovering the mark on a panel row shows the reason in a tooltip
 
-レイヤーパネルの並びはPhotoshopに合わせ、`children`を**逆順**にして上が最前面になるようにする。グループは折りたたみできる。
+The layer panel follows Photoshop's order, **reversing** `children` so that the front is at the top. Groups can be collapsed.
 
-### 扱うデータ
+### Data
 
-`ag-psd`から読むもの。読み込みオプションは[ag-psdの実API](../ag-psd-notes.md)のとおり`useImageData: true`・`skipCompositeImageData: true`・`skipThumbnail: true`。
+What gets read from `ag-psd`. The read options are `useImageData: true`, `skipCompositeImageData: true`, and `skipThumbnail: true`, per [the ag-psd notes](../ag-psd-notes.md).
 
-| 用途 | 出どころ | 変換 |
+| Purpose | Source | Conversion |
 | --- | --- | --- |
-| ドキュメントサイズ | `psd.width`・`psd.height` | 寸法上限の判定に使う |
-| レイヤーツリー | `psd.children`を再帰 | `children`の有無でグループを判別する |
-| 表示状態 | `layer.hidden` | `visible: !layer.hidden`へ反転する |
-| 不透明度 | `layer.opacity`（0〜1） | 変換不要。**掛け合わせるのは`"pass through"`のグループの分だけ**（後述） |
-| 描画モード | `layer.blendMode` | 対応表で`globalCompositeOperation`へ写す |
-| クリッピング | `layer.clipping` | 直下のベースレイヤーへの切り抜き指定として扱う |
-| レイヤーの境界 | `layer.left`・`top`・`right`・`bottom` | ドキュメント座標。描画時のオフセットに使う |
-| ピクセル | `layer.imageData` | 型は`PixelData`。レイヤー境界のサイズで、ドキュメントサイズではない |
-| レイヤーマスク | `layer.mask` | `imageData`・矩形・`disabled`・`defaultColor`を使う。マスクの矩形はレイヤーの矩形と一致しない |
-| 名前 | `layer.name` | `undefined`のとき`"(名称未設定)"`を表示する |
+| Document size | `psd.width`, `psd.height` | Used for the dimension checks |
+| Layer tree | Recurse through `psd.children` | A node is a group when it has `children` |
+| Visibility | `layer.hidden` | Inverted into `visible: !layer.hidden` |
+| Opacity | `layer.opacity` (0-1) | No conversion. **Only a `"pass through"` group's share gets multiplied in** (below) |
+| Blend mode | `layer.blendMode` | Mapped onto `globalCompositeOperation` through the table |
+| Clipping | `layer.clipping` | Treated as clipping to the base layer directly below |
+| Layer bounds | `layer.left`, `top`, `right`, `bottom` | Document coordinates. Used as the offset when drawing |
+| Pixels | `layer.imageData` | Typed `PixelData`. Sized to the layer bounds, not the document |
+| Layer mask | `layer.mask` | Uses `imageData`, the rectangle, `disabled`, and `defaultColor`. The mask's rectangle does not match the layer's |
+| Name | `layer.name` | When `undefined`, display the `UNNAMED_LAYER` placeholder |
 
-アプリが保持する状態と置き場所。方針は[react.md](../../.claude/rules/react.md)に従う。
+The state the app holds, and where it lives. The approach follows [react.md](../../.claude/rules/react.md).
 
-| 状態 | 置き場所 | 理由 |
+| State | Location | Why |
 | --- | --- | --- |
-| 表示中のドキュメント（ファイル名・ドキュメントサイズ） | `atoms/document.ts` | 後述。読み込みの試みとは分ける |
-| 読み込みの試み（`idle`・`parsing`・`error`） | `atoms/document.ts` | unionで持ち`switch`で分岐する |
-| パース結果と中間バッファ | Worker内のローカル変数 | Workerごと破棄されるので、メインスレッドへ持ち越さない |
-| 合成結果のRGBA | `usePsdDocument`内の`useRef` | 巨大なピクセルデータをReact stateに入れない |
-| レイヤーツリー（描画パラメータのみ、ピクセルを含まない） | `atoms/layers.ts` | パネルとCanvasの両方が読む |
-| 表示倍率（`"fit"`・`"actual"`） | `atoms/viewport.ts` | |
-| 未対応要素の一覧 | 派生atom | レイヤーツリーから計算できる。二重に持たない |
+| The document on display (filename, document size) | `atoms/document.ts` | Below. Kept apart from the load attempt |
+| The load attempt (`idle`, `parsing`, `error`) | `atoms/document.ts` | Held as a union and branched on with `switch` |
+| Parse results and intermediate buffers | Locals inside the worker | Discarded with the worker, never carried to the main thread |
+| The composited RGBA | A `useRef` inside `usePsdDocument` | Huge pixel data does not go into React state |
+| Layer tree (drawing parameters only, no pixels) | `atoms/layers.ts` | Both the panel and the canvas read it |
+| Scale (`"fit"`, `"actual"`) | `atoms/viewport.ts` | |
+| The list of unsupported elements | A derived atom | Computable from the layer tree. Not held twice |
 
-**「表示中のドキュメント」と「読み込みの試み」を別のatomにする。**エラーのとき前の描画を消さない（後述）ので、Canvasとレイヤーパネルには前のファイルの内容が残る一方、失敗したのは別のファイルという状態になる。1つのunionに混ぜると、画面に出ているツリーがどちらのファイルのものか表現できない。
+**The document on display and the load attempt are separate atoms.** A failure leaves the previous render alone (below), so the canvas and the layer panel keep showing the previous file while the failure belongs to a different one. Mixed into a single union, there is no way to express which file the visible tree came from.
 
-- 表示中のドキュメント — 読み込みに成功したときだけ差し替わる。`null`は「まだ何も開いていない」。ファイル名をツールバーに出し、レイヤーパネルとCanvasの持ち主を示す
-- 読み込みの試み — 最後に開こうとしたファイルの結果。`parsing`は対象の`File`、`error`はファイル名と理由を持つ。次の読み込みが成功したら`idle`へ戻す。`File`は参照だけで中身を持たないためatomに置ける
+- The document on display — replaced only when a load succeeds. `null` means nothing has been opened yet. Its filename goes in the toolbar, and it says who the layer panel and canvas belong to
+- The load attempt — the outcome for the file most recently opened. `parsing` holds the `File`, `error` holds a filename and a reason. It returns to `idle` once a load succeeds. A `File` is only a reference and holds no contents, so it can live in an atom
 
-`ready`という状態は持たない。表示中のドキュメントが`null`でないことがそれに当たる。
+There is no `ready` state. The document on display being non-`null` is what that would mean.
 
-レイヤーツリーのノードはピクセルを持たない。ピクセルはrefの側に置き、ノードはそこへのidだけを持つ。
+Nodes in the layer tree hold no pixels. Pixels live on the ref side, and a node holds only an id into it.
 
-**パースと合成はWorkerで行う。**`DropZone`は受け取った`File`をatomへ書くだけにし、Workerとのやり取りと描画は`CanvasViewport`が`usePsdDocument`（`hooks/psdHooks.ts`）を通して行う。判断の経緯は[ADR-0004](../adr/0004-worker-offloading.md)。
+**Parsing and compositing happen in a worker.** `DropZone` only writes the `File` it receives into an atom; talking to the worker and drawing are `CanvasViewport`'s job, through `usePsdDocument` (`hooks/psdHooks.ts`). The reasoning is in [ADR-0004](../adr/0004-worker-offloading.md).
 
-描くのを`CanvasViewport`に寄せるのは、refがコンポーネント単位のため。共通の親に置こうとすると`app/page.tsx`が`"use client"`になり、[react.md](../../.claude/rules/react.md)の「境界を末端へ押し下げる」と衝突する。
+Drawing is concentrated in `CanvasViewport` because a ref is per-component. Putting it in a shared parent would make `app/page.tsx` `"use client"`, which collides with [react.md](../../.claude/rules/react.md)'s rule about pushing the boundary toward the leaves.
 
-### 異常系
+### Failure cases
 
-| 状況 | 挙動 |
+| Situation | Behavior |
 | --- | --- |
-| PSDでない・壊れている | `readPsd`の例外を捕まえ、失敗したファイル名とエラー内容を下端に出す。**表示中のドキュメントは差し替えない**ので、前の描画とレイヤーパネルはそのまま残る |
-| 読み込み中に別のファイルを開こうとした | 受け付けて差し替える。走っているWorkerをterminateするだけで中断できるので、入力を止める必要がない |
-| ドキュメントサイズが上限超過 | 合成を始めずにエラー表示。**長辺と面積の両方を見る**（後述） |
-| ピクセルの総量が大きすぎる | `readPsd`が`Error("Exceeded memory limit")`を投げる。`totalMemoryLimit`はレイヤーとマスクをデコードするたびに減っていく累積の予算で、`parse.ts`で**4GB**を明示する（`ag-psd`の既定は2GBだが、100MB級のPSDがそこに当たって開けなかった）。このメッセージだけ「PSDが大きすぎて読み込めない」に読み替えて表示する |
-| 16bit・32bitのPSD | `imageData`が`ImageData`ではないため`putImageData`できない。ファイル単位でエラー表示にして開かない |
-| ピクセルを持たないレイヤー（調整レイヤー等） | 描画をスキップし、パネルには出す。未対応として印を付ける |
-| 対応する合成演算が無い描画モード | `normal`へフォールバックして描画を続ける。未対応として印を付ける |
-| レイヤー効果が付いたレイヤー | `imageData`をそのまま描く（効果は再現されない）。未対応として印を付ける |
-| 名前が`undefined` | `"(名称未設定)"`で表示する |
+| Not a PSD, or corrupt | Catch `readPsd`'s exception and show the failed filename and the error along the bottom. **The document on display is not replaced**, so the previous render and layer panel stay |
+| Another file opened mid-load | Accept it and replace. Terminating the running worker is enough to cancel, so input never has to be blocked |
+| Document size over the limit | Error out before compositing starts. **Both the longest edge and the area are checked** (below) |
+| Too many pixels in total | `readPsd` throws `Error("Exceeded memory limit")`. `totalMemoryLimit` is a cumulative budget drawn down by every layer and mask decoded, and `parse.ts` sets **4GB** explicitly (`ag-psd` defaults to 2GB, which 100MB-class PSDs were hitting). This message alone is rewritten to say the PSD is too large to read |
+| 16-bit and 32-bit PSDs | `imageData` is not an `ImageData`, so `putImageData` cannot take it. Error out for the whole file and do not open it |
+| A layer with no pixels (an adjustment layer, say) | Skip drawing it, but show it in the panel. Mark it unsupported |
+| A blend mode with no matching operation | Fall back to `normal` and carry on drawing. Mark it unsupported |
+| A layer carrying layer effects | Draw `imageData` as it is, with the effects not reproduced. Mark it unsupported |
+| `name` is `undefined` | Display the `UNNAMED_LAYER` placeholder |
 
-未対応要素の見せ方を3段階にする。
+Unsupported elements are surfaced at three levels.
 
-1. パネルの該当行に印を出す
-2. 印にhoverするとTooltipで理由を出す（「調整レイヤーは描画しない」「描画モード`vivid light`に対応する合成演算が無い」等）
-3. パネルのヘッダに件数を1行出す（「未対応3件」）
+1. A mark on the row in the panel
+2. Hovering the mark shows the reason in a tooltip (an adjustment layer is not drawn; no compositing operation matches blend mode `vivid light`; and so on)
+3. A one-line count in the panel header (3 unsupported)
 
-ヘッダの件数を出すのは、レイヤー数が多いPSDでスクロールしないと印に気づけないため。**未対応があってもファイルは開き、描けるところまで描く。**このバージョンの目的は「正しく表示されているか」を判断できることなので、黙ってスキップしない。
+The header count exists because on a PSD with many layers a mark can sit below the fold. **A file with unsupported elements still opens, drawn as far as it can be.** The point of this version is being able to judge whether the picture is right, so nothing is skipped silently.
 
-## 技術設計
+## Technical design
 
-### ファイル構成
+### File layout
 
 ```
 lib/psd/
-├─ parse.ts       ← readPsdのラッパ。オプションを固定する
-├─ tree.ts        ← ag-psdのLayer → アプリのLayerNode。visible反転・pass throughのopacity伝播・未対応判定
-├─ blendMode.ts   ← 描画モードの対応表とフォールバック
-├─ mask.ts        ← マスクのRチャンネルをアルファへ移す
-├─ limits.ts      ← 長辺・面積の上限判定
-└─ composite.ts   ← 分離モデルの再帰合成
+├─ parse.ts       ← wraps readPsd, fixing the options
+├─ tree.ts        ← ag-psd Layer → the app's LayerNode. Inverts visible, propagates pass-through opacity, flags unsupported
+├─ blendMode.ts   ← the blend mode table and the fallback
+├─ mask.ts        ← moves a mask's R channel into alpha
+├─ limits.ts      ← the edge and area checks
+└─ composite.ts   ← recursive compositing, isolated model
 
-lib/psd/worker.ts       ← Worker本体。パースと合成を担う
-lib/psd/workerMessage.ts ← 送受信するメッセージの型
+lib/psd/worker.ts        ← the worker itself. Parsing and compositing
+lib/psd/workerMessage.ts ← the types of the messages exchanged
 
 hooks/
-└─ psdHooks.ts   ← usePsdDocument。Workerとのやり取りと描画
+└─ psdHooks.ts    ← usePsdDocument. Talks to the worker and draws
 
 components/
-├─ file-import/DropZone.tsx     ← Fileをatomへ書くだけ
-├─ viewer/CanvasViewport.tsx    ← usePsdDocumentを呼び、描画まで担う
+├─ file-import/DropZone.tsx     ← only writes the File into an atom
+├─ viewer/CanvasViewport.tsx    ← calls usePsdDocument and does the drawing
 ├─ viewer/ZoomToggle.tsx
 ├─ layers/LayerPanel.tsx
 ├─ layers/LayerRow.tsx
@@ -156,204 +157,204 @@ atoms/
 └─ viewport.ts
 ```
 
-`app/page.tsx`はこれらを組むだけにする。`app/psd-check/page.tsx`はこのバージョンの完成をもって削除する（ファイル冒頭のコメントにそう書いてある）。
+`app/page.tsx` only assembles these. `app/psd-check/page.tsx` gets deleted once this version is finished — a comment at the top of that file says so.
 
-### データの流れ
+### Data flow
 
 ```
-DropZone           読み込みの試みを{status:"parsing", file}にする
- → CanvasViewport   usePsdDocumentがWorkerを生成し、ArrayBufferを転送する
+DropZone            sets the load attempt to {status:"parsing", file}
+ → CanvasViewport   usePsdDocument creates a worker and transfers the ArrayBuffer
    ┌─ Worker ────────────────────────────────────────┐
-   │ initializeCanvas  OffscreenCanvasを渡す（必須）  │
-   │ → parse.ts        readPsd（同期。ここは止まってよい）│
-   │ → limits.ts       長辺と面積のチェック            │
-   │ → tree.ts         LayerNode[] + ピクセルの表      │
-   │ → composite.ts    OffscreenCanvasへ再帰合成       │
-   │ → getImageData    RGBAを取り出して転送            │
+   │ initializeCanvas  hand it an OffscreenCanvas (required) │
+   │ → parse.ts        readPsd (synchronous; stalling here is fine) │
+   │ → limits.ts       the edge and area checks       │
+   │ → tree.ts         LayerNode[] + the pixel table  │
+   │ → composite.ts    recursive compositing into an OffscreenCanvas │
+   │ → getImageData    take out the RGBA and transfer it │
    └──────────────────────────────────────────────────┘
- → CanvasViewport   putImageDataで1回描く。Workerをterminateする
-   → 表示中のドキュメントを差し替え、読み込みの試みをidleへ戻す
+ → CanvasViewport   draw once with putImageData. Terminate the worker
+   → replace the document on display, return the load attempt to idle
 ```
 
-途中で失敗したら、読み込みの試みを`error`にするだけで表示中のドキュメントには触れない。
+On a failure anywhere along the way, the load attempt is set to `error` and the document on display is left alone.
 
-`LayerPanel`は`atoms/layers.ts`を読むだけで、パースにも描画にも関わらない。
+`LayerPanel` only reads `atoms/layers.ts`; it takes part in neither parsing nor drawing.
 
-`tree.ts`と`composite.ts`を分けるのは[テスト規約](../../.claude/rules/testing.md)の方針に合わせるため。描画パラメータの計算は`tree.ts`側の純関数に寄せ、Canvasへの書き込みは薄くする。
+`tree.ts` and `composite.ts` are separate to suit the [testing conventions](../../.claude/rules/testing.md). Computing drawing parameters is concentrated in pure functions on the `tree.ts` side, keeping the canvas writes thin.
 
-### 合成アルゴリズム（分離モデル）
+### Compositing algorithm (isolated model)
 
-ノードを`children`の順（背面から）に走査し、次の規則で描く。
+Walk nodes in `children` order, back to front, drawing by these rules.
 
-- **レイヤー** — 自分の`OffscreenCanvas`へ`imageData`を`putImageData`し、レイヤーマスクがあれば後述の手順で掛ける。できたバッファを、親バッファへ`blendMode`と`opacity`を適用して`drawImage`する。`imageData`の型は`PixelData`で`ImageData`とは別物なので、`data instanceof Uint8ClampedArray`で絞り込んでから`putImageData`へ渡す（[ag-psdの実API](../ag-psd-notes.md)を参照）
-- **グループ（`blendMode`が`"pass through"`以外）** — 自分の`OffscreenCanvas`を作り、子を再帰的にそこへ描く。できたバッファへグループのマスクを掛け、親バッファへグループの`blendMode`と`opacity`を適用して`drawImage`する
-- **グループ（`"pass through"`）** — 子を**親のバッファへ直接**描く。グループの`opacity`は子の`opacity`へ掛け合わせて渡す
-- **`clipping: true`のレイヤー** — 後述
-- **`visible`が`false`のノード** — グループごとスキップする
+- **A layer** — `putImageData` its `imageData` into its own `OffscreenCanvas`, then apply the layer mask by the procedure below if there is one. `drawImage` the resulting buffer into the parent buffer with `blendMode` and `opacity` applied. `imageData` is typed `PixelData`, a different thing from `ImageData`, so narrow with `data instanceof Uint8ClampedArray` before handing it to `putImageData` (see [the ag-psd notes](../ag-psd-notes.md))
+- **A group whose `blendMode` is not `"pass through"`** — make its own `OffscreenCanvas` and draw the children into it recursively. Apply the group's mask to that buffer, then `drawImage` it into the parent with the group's `blendMode` and `opacity`
+- **A `"pass through"` group** — draw the children **straight into the parent's buffer**. The group's `opacity` is multiplied into the children's and passed down
+- **A layer with `clipping: true`** — below
+- **A node whose `visible` is `false`** — skipped, groups and all
 
-`opacity`はCanvasの`globalAlpha`、`blendMode`は`globalCompositeOperation`で表現する。`imageData`はレイヤー境界のサイズなので、ドキュメント座標へのオフセットを付けて配置する。
+`opacity` is expressed through the canvas's `globalAlpha` and `blendMode` through `globalCompositeOperation`. `imageData` is sized to the layer bounds, so it is placed with an offset into document coordinates.
 
-#### グループの不透明度を掛ける場所
+#### Where group opacity gets applied
 
-**グループの`opacity`を`tree.ts`と`composite.ts`の両方で掛けない。**掛ける場所はグループの種類で分かれる。
+**A group's `opacity` must not be applied in both `tree.ts` and `composite.ts`.** Where it goes depends on the kind of group.
 
-| グループの種類 | 掛ける場所 | 理由 |
+| Kind of group | Where it is applied | Why |
 | --- | --- | --- |
-| `"pass through"` | `tree.ts`が子の`opacity`へ掛け合わせる | 自分のバッファを持たないので、掛ける相手が子しかない |
-| それ以外（分離） | `composite.ts`が親へ`drawImage`するときに`globalAlpha`で掛ける | バッファを1枚に合成してから掛けるのがPhotoshopの挙動。子へ掛け合わせると、子同士が重なった部分だけ濃くなる |
+| `"pass through"` | `tree.ts` multiplies it into the children's `opacity` | It has no buffer of its own, so the children are the only thing to apply it to |
+| Anything else (isolated) | `composite.ts` applies it with `globalAlpha` when drawing into the parent | Compositing into one buffer and then applying it is what Photoshop does. Multiplying it into the children makes the places where children overlap come out darker |
 
-分離グループの`opacity`は`tree.ts`ではグループのノードに残したままにする。両方で掛けると、不透明度50%のグループの中の100%のレイヤーが25%になる。
+An isolated group's `opacity` stays on the group node in `tree.ts`. Applied in both places, a 100% layer inside a 50% group ends up at 25%.
 
-[ag-psdの実API](../ag-psd-notes.md)の「ag-psdは親をさかのぼって掛け合わせた不透明度を提供しない」は、**掛け合わせを`tree.ts`で常にやれという意味ではない。**分離モデルでは分離グループの分を`composite.ts`が受け持つ。
+The line in [the ag-psd notes](../ag-psd-notes.md) — "`ag-psd` does not hand back an opacity accumulated down from the ancestors" — **does not mean `tree.ts` should always do the multiplying.** In the isolated model, `composite.ts` takes on the isolated groups' share.
 
-### 中間バッファのサイズ
+### The size of intermediate buffers
 
-**バッファはドキュメントサイズで取らない。子孫のレイヤー境界の和集合をドキュメント矩形でクランプしたものを使う。**和集合が空のグループは描画ごとスキップする。
+**Buffers are not allocated at document size. Use the union of the descendant layers' bounds, clamped to the document rectangle.** A group whose union is empty is skipped, drawing and all.
 
-ドキュメントサイズで取ると、上限の長辺`16384px`では1枚あたり約1GBになる。分離グループは入れ子の深さの分だけ同時に生きるため、深さ5で5GB。実用的なPSDでもグループが10段重なれば破綻する。
+At document size, the 16384px edge limit would make each one about 1GB. Isolated groups are alive simultaneously to the depth of the nesting, so depth 5 is 5GB. Even a practical PSD falls apart once groups nest 10 deep.
 
-親へ`drawImage`し終えた子のバッファはその場で解放する。同じ深さの兄弟が同時に生きないようにする。
+A child's buffer is freed as soon as it has been drawn into its parent, so siblings at the same depth are never alive at once.
 
-### 描画モードの対応表
+### The blend mode table
 
-方針は[ADR-0002](../adr/0002-blend-mode-mapping.md)で決めた。**Canvas 2Dの`globalCompositeOperation`へ写せる17個だけ対応し、残り10個は`normal`へ倒して未対応の印を出す。**自前のピクセル演算は入れない。
+The approach is settled in [ADR-0002](../adr/0002-blend-mode-mapping.md). **Support the 17 that map onto Canvas 2D's `globalCompositeOperation`, fall back to `normal` for the remaining 10, and mark those unsupported.** No pixel math of our own.
 
-`layer.blendMode`に実際に入りうるのは`ag-psd`の`toBlendMode`が返す28個。`pass through`はグループを分離するかどうかの分岐で合成演算ではないため、対応表には載せない。残る27個の内訳は次のとおり。
+What can actually appear on `layer.blendMode` is the 28 values `ag-psd`'s `toBlendMode` returns. `pass through` decides whether a group is isolated and is not a compositing operation, so it is not in the table. The remaining 27 break down as:
 
-| | 内訳 |
+| | Members |
 | --- | --- |
-| 名前が対応する16個 | `normal`・`darken`・`multiply`・`color burn`・`lighten`・`screen`・`color dodge`・`overlay`・`soft light`・`hard light`・`difference`・`exclusion`・`hue`・`saturation`・`color`・`luminosity` |
-| 名前は違うが写せる1個 | `linear dodge` → `lighter`（加算合成。下地が不透明なら一致する） |
-| 写せない10個 | `dissolve`・`linear burn`・`darker color`・`lighter color`・`vivid light`・`linear light`・`pin light`・`hard mix`・`subtract`・`divide` |
+| 16 that match by name | `normal`, `darken`, `multiply`, `color burn`, `lighten`, `screen`, `color dodge`, `overlay`, `soft light`, `hard light`, `difference`, `exclusion`, `hue`, `saturation`, `color`, `luminosity` |
+| 1 that maps under a different name | `linear dodge` → `lighter` (additive compositing; agrees when the backdrop is opaque) |
+| 10 with no mapping | `dissolve`, `linear burn`, `darker color`, `lighter color`, `vivid light`, `linear light`, `pin light`, `hard mix`, `subtract`, `divide` |
 
-`blendMode.ts`は`Record<BlendMode, GlobalCompositeOperation | null>`を持ち、`null`のとき未対応として記録して`source-over`で描画を続ける。
+`blendMode.ts` holds a `Record<BlendMode, GlobalCompositeOperation | null>`; on `null` it records the layer as unsupported and carries on drawing with `source-over`.
 
-`soft light`と非分離モード（`hue`・`saturation`・`color`・`luminosity`）は、実物のPSDで一致することを確認済み。`linear dodge`は下地が半透明のときだけ本来より不透明になるが、印は出さない（判断はADR-0002）。
+`soft light` and the non-separable modes (`hue`, `saturation`, `color`, `luminosity`) are confirmed to match on real PSDs. `linear dodge` comes out more opaque than it should only over a semi-transparent backdrop, and shows no mark (the reasoning is in ADR-0002).
 
-### 読み込み中の表示と中断
+### Loading indicator and cancellation
 
-`readPsd`は同期関数だが、Workerで走るのでメインスレッドは止まらない。ローディング表示は普通に描かれ、読み込み中もレイヤーパネルの折りたたみや倍率の切り替えが効く。
+`readPsd` is synchronous, but it runs in a worker, so the main thread does not stall. The loading indicator paints normally, and collapsing a group or switching scale keeps working during a load.
 
-**読み込み中に別のファイルが来たら受け付けて差し替える。**走っているWorkerを`terminate()`するだけで中断できるため、入力を無効化する必要がない。同期実行中の`readPsd`を止める方法は他に無い。
+**A file arriving mid-load is accepted and replaces the current one.** `terminate()` on the running worker is enough to cancel, so input never has to be disabled. There is no other way to stop a `readPsd` running synchronously.
 
-以前はメインスレッドでパースしていたため、ローディング表示を1度だけ塗らせるために`requestAnimationFrame`を2回待つ必要があった。**Workerへ移したことでこの回避策は不要になった。**
+Parsing used to happen on the main thread, which required waiting two `requestAnimationFrame`s just to get the loading indicator painted once. **Moving to a worker made that workaround unnecessary.**
 
-### ドキュメントサイズの上限
+### Document size limits
 
-**長辺だけでは足りない。長辺と面積の両方を見る。**ブラウザのCanvasは辺の長さと面積の両方に制約があり、Chromeの面積上限は268,435,456px（16384×16384ちょうど）。長辺16384pxだけを条件にすると、16384×16384のPSDが素通りして面積上限に当たる。
+**The longest edge is not enough on its own. Check both the edge and the area.** A browser canvas is constrained on both, and Chrome's area limit is 268,435,456px (exactly 16384×16384). Testing only for a 16384px edge lets a 16384×16384 PSD through into the area limit.
 
-面積の上限はメモリから逆算する。ドキュメントサイズで確保されるのは表示用Canvas・ルートのバッファ・転送するRGBAの3枚（Worker側とメインスレッド側に分かれる）。
+The area limit is derived from memory. What gets allocated at document size is three surfaces — the display canvas, the root buffer, and the RGBA being transferred — split across the worker and the main thread.
 
-| 上限 | 仮置きの値 | 根拠 |
+| Limit | Provisional value | Basis |
 | --- | --- | --- |
-| 長辺 | 16384px | Chrome・Firefoxの辺の上限に合わせる |
-| 面積 | 67,108,864px（8192×8192相当） | 1枚268MB、3枚で約800MB。`ag-psd`のデコード分（最大2GB）に上乗せされる |
+| Longest edge | 16384px | Matches Chrome's and Firefox's edge limit |
+| Area | 67,108,864px (8192×8192 equivalent) | 268MB each, about 800MB for three. That sits on top of `ag-psd`'s decoding (up to 2GB) |
 
-どちらの値も仮置きで、実測して調整する。この判定は`readPsd`の後に走るため、`ag-psd`のデコード分のメモリはこの時点で既に確保済み。**面積の上限はその上に何を積めるかを決めている。**
+Both values are provisional and get adjusted by measurement. The check runs after `readPsd`, so `ag-psd`'s decoding memory is already allocated by then. **The area limit governs what can be stacked on top of that.**
 
-### レイヤーマスクの適用
+### Applying a layer mask
 
-**`mask.imageData`をそのまま`"destination-in"`で掛けてはいけない。**`ag-psd`はマスクの値をRGBの各チャンネルへ複製し、アルファは全面255で返す。`destination-in`はソースのアルファを見る演算なので、そのまま掛けると濃淡が無視され、マスク矩形での矩形切り抜きにしかならない。
+**`mask.imageData` must not be applied with `"destination-in"` as it is.** `ag-psd` copies the mask's value into each RGB channel and returns alpha at 255 everywhere. `destination-in` looks at the source's alpha, so applied directly it ignores the gradations and produces nothing but a rectangular cut at the mask's bounds.
 
-`lib/psd/mask.ts`に次の手順を純関数として置く。
+`lib/psd/mask.ts` holds this procedure as a pure function.
 
-1. レイヤーバッファと同じ大きさの`ImageData`を作る
-2. 全面のアルファを`mask.defaultColor`（0または255。マスク矩形の外側の値）で埋める
-3. マスク矩形の位置に、`mask.imageData`のRチャンネルの値をアルファとして書き込む
-4. できた`ImageData`を一時バッファへ`putImageData`し、レイヤーバッファへ`globalCompositeOperation = "destination-in"`で掛ける
+1. Make an `ImageData` the same size as the layer buffer
+2. Fill its alpha everywhere with `mask.defaultColor` (0 or 255, the value outside the mask rectangle)
+3. At the mask rectangle's position, write the R channel of `mask.imageData` in as alpha
+4. `putImageData` the result into a scratch buffer and apply it to the layer buffer with `globalCompositeOperation = "destination-in"`
 
-手順2が要るのは、`destination-in`が描画範囲の外も含めた宛先全体に効くため。マスク矩形がレイヤーより小さく`defaultColor`が255（矩形外は表示）のとき、この手順を踏まないと矩形外が消える。
+Step 2 is needed because `destination-in` affects the whole destination, including the area outside what was drawn. When the mask rectangle is smaller than the layer and `defaultColor` is 255 — meaning the area outside is visible — skipping that step erases it.
 
-RGBのどれを読んでもよいが、Rに統一する。`mask.disabled`が`true`のマスクは適用しない。
+Any of the RGB channels would do; R is used consistently. A mask whose `disabled` is `true` is not applied.
 
-グループのマスクも同じ手順で、グループのバッファに対して掛ける。
+A group's mask follows the same procedure, applied to the group's buffer.
 
-### クリッピングマスクの合成
+### Compositing a clipping mask
 
-`clipping: true`のレイヤーは、直前の非クリッピングレイヤー（ベース）と連続したまとまりとして扱う。まとまり専用のバッファを作り、次の順で処理する。
+A layer with `clipping: true` is treated as one run together with the nearest non-clipping layer below it (the base). A buffer is made for the run and processed in this order.
 
-1. ベースを`normal`・不透明度1でバッファへ描く
-2. クリッピングレイヤー群を、それぞれの`blendMode`・`opacity`で上に重ねる
-3. ベースのアルファで`"destination-in"`を掛け、ベースの不透明部分の外を落とす
-4. **ベースの`blendMode`と`opacity`で**まとまり全体を親バッファへ合成する
+1. Draw the base into the buffer with `normal` and opacity 1
+2. Stack the clipping layers on top, each with its own `blendMode` and `opacity`
+3. Apply `"destination-in"` with the base's alpha, dropping everything outside the base's opaque area
+4. Composite the whole run into the parent buffer **with the base's `blendMode` and `opacity`**
 
-ベースの`blendMode`と`opacity`を1ではなく4で使うのは、Photoshopの「クリッピングレイヤーをグループとして合成」がオンのときの挙動に合わせるため。ベースが乗算のとき、1で乗算を適用してしまうとクリッピングレイヤーが乗算後のベースに対して重なり、絵が変わる。
+The base's `blendMode` and `opacity` are used in step 4 rather than step 1 to match Photoshop's behavior when "blend clipped layers as group" is on. If the base is multiply and the multiply were applied in step 1, the clipping layers would sit on top of an already-multiplied base and the picture would change.
 
-この設定は`ag-psd`が`layer.blendClippendElements`で公開している（**綴りはこの通り。`blendClipped`ではない**）。PSD側に該当ブロックが無いと`undefined`になるが、Photoshopの既定がオンなので`undefined`は`true`として扱う。**明示的に`false`のときはこの規則と合わないため、未対応の印を付けたうえで`true`の規則で描く。**`false`の分岐は実装しない。
+`ag-psd` exposes that setting as `layer.blendClippendElements` (**spelled exactly that way, not `blendClipped`**). It is `undefined` when the PSD has no such block, and since Photoshop's default is on, `undefined` is treated as `true`. **An explicit `false` does not fit this rule, so the layer is marked unsupported and drawn by the `true` rule anyway.** The `false` branch is not implemented.
 
-`composite.ts`はDOMに触れず`OffscreenCanvas`と`ImageData`だけで完結させる。この狙いは機能し、[ADR-0004](../adr/0004-worker-offloading.md)でWorkerへ移すときに`lib/psd/`は無改造で済んだ。
+`composite.ts` touches no DOM and works entirely through `OffscreenCanvas` and `ImageData`. That paid off: moving to a worker in [ADR-0004](../adr/0004-worker-offloading.md) took no changes to `lib/psd/`.
 
-### 資源の解放
+### Releasing resources
 
-合成の中間バッファはWorker内で完結し、Workerごと破棄される。メインスレッドが持つのは合成結果のRGBAだけで、新しいファイルを開いたときに差し替わる。PSDは1枚でも数百MBのピクセルデータになるため、解放漏れがそのままメモリ枯渇につながる。
+Intermediate compositing buffers stay inside the worker and are discarded with it. All the main thread holds is the composited RGBA, replaced when a new file is opened. A single PSD can be hundreds of megabytes of pixel data, so a leak leads straight to exhaustion.
 
-**`ImageBitmap`をWorkerから転送しない。**Chromeでは実体がWorkerの寿命に紐づいており、転送後にterminateすると中身が失われる（[ADR-0004](../adr/0004-worker-offloading.md)）。
+**Do not transfer an `ImageBitmap` out of the worker.** In Chrome it is backed by the worker's lifetime, and terminating after the transfer loses the contents ([ADR-0004](../adr/0004-worker-offloading.md)).
 
-合成中の中間バッファは、親へ`drawImage`し終えた時点でその場で解放する。cleanupまで持ち越さない。
+An intermediate buffer is freed the moment it has been drawn into its parent, not carried through to cleanup.
 
-このバージョンは再描画のきっかけが「ファイルを開く」しか無いので、`requestAnimationFrame`による**フレーム集約**は入れない。表示切替や不透明度スライダーを足すときに導入する。
+The only thing that triggers a redraw in this version is opening a file, so no **frame coalescing** through `requestAnimationFrame` is added. It comes in with visibility toggles and an opacity slider.
 
-## 検討した代替案
+## Alternatives considered
 
-- **グループを常にフラット化する** — 実装は最も単純だが、グループの不透明度が100%未満で子同士が重なっていると、重なり部分が濃くなってPhotoshopと違う絵になる。マスクを入れる時点で中間バッファはどのみち必要になるため、分離モデルとの実装量の差は小さいと判断した
-- **最初からWeb Workerへ分離する** — 大きいPSDでUIが固まらない利点があるが、絵が違うときに「合成が間違っているのか転送で壊れたのか」の切り分けが増える。`OffscreenCanvas`はメインスレッドでも使えるので、`composite.ts`をDOM非依存に書いておけば移行コストは小さい。**この判断は後に覆した。**合成の正しさが確認できて切り分けの懸念が消えたため、[ADR-0004](../adr/0004-worker-offloading.md)でWorkerへ逃がした。`lib/psd/`は無改造で移せた
-- **描画モードを扱わず通常合成だけにする** — 描画モードは[ADR-0001](../adr/0001-psd-parser.md)で`ag-psd`を選んだ理由そのもので、落とすと選定の前提が崩れる
-- **ズーム・パンを入れる** — ビューアとして本来欲しいが、ズーム中心の計算・境界のクランプ・ホイールイベントの扱いに手間がかかり、合成の正しさを詰める今回の主題と別の作業になる
+- **Always flatten groups** — the simplest to implement, but with group opacity below 100% and children overlapping, the overlap comes out darker and the picture differs from Photoshop. Intermediate buffers are needed for masks anyway, so the difference in implementation cost against the isolated model is small
+- **Split into a Web Worker from the start** — it keeps the UI from freezing on large PSDs, but adds work in telling a compositing bug apart from something broken in transfer. `OffscreenCanvas` works on the main thread too, so writing `composite.ts` free of the DOM keeps the migration cheap. **This was later overturned.** With compositing confirmed correct, the worry about telling failures apart went away, and [ADR-0004](../adr/0004-worker-offloading.md) moved it into a worker. `lib/psd/` moved unmodified
+- **Skip blend modes and composite everything normally** — blend modes are the very reason [ADR-0001](../adr/0001-psd-parser.md) chose `ag-psd`, so dropping them collapses the premise of that choice
+- **Add zoom and pan** — genuinely wanted in a viewer, but the zoom-center math, clamping at the edges, and wheel event handling are all work, and a different job from getting compositing right
 
-## 未解決の論点
+## Open questions
 
-- **`realMask`の扱い** — `mask`とは別にもう1枚のマスク枠がある。実データでどう入るかを確認していない
-- **ベクトルマスクの扱い** — `vectorMask`はパス情報だけでラスタライズ済みのピクセルを持たない。自前でパスを描くことになるため、今回は対象外とする方向だが確定していない
-- **`pass through`のグループに不透明度やマスクが付いた場合** — Photoshopでは分離されるように見えるが、実データで確認していない。仕様どおり「`pass through`は親バッファへ直接描く」で始め、絵が合わなければ分離側へ倒す
-- **上限の具体値** — 長辺16384px・面積67,108,864pxはどちらも仮置きで、ブラウザごとに上限が違うため実測して調整する。判定の形（長辺と面積の両方を見る）と役割分担は決まっている。`ag-psd`のデコード分は`totalMemoryLimit`が累積で見るので、`limits.ts`は**Canvasの寸法・面積の上限と、その上に積むバッファのメモリ**を担う
-- **`fillOpacity`（塗りの不透明度）** — `layer.fillOpacity`で0〜1で読める。`opacity`とは別物。今回は扱わないが、値が1未満のとき未対応として印を出すかどうかを決めていない
+- **What to do about `realMask`** — a second mask slot alongside `mask`. How real data fills it in has not been checked
+- **What to do about vector masks** — `vectorMask` holds path data only, with no rasterized pixels. Drawing the path would be on us, so the leaning is to leave it out this time, but that is not settled
+- **A `"pass through"` group carrying opacity or a mask** — Photoshop appears to isolate it, but this has not been checked against real data. Start with the spec's rule, drawing pass-through groups straight into the parent buffer, and switch to isolating if the picture does not match
+- **The actual limit values** — 16384px on the edge and 67,108,864px of area are both provisional and get adjusted by measurement, since browsers differ. The shape of the check — both edge and area — and the division of responsibility are settled. `ag-psd`'s decoding is watched cumulatively by `totalMemoryLimit`, so `limits.ts` covers **the canvas dimension and area limits, and the memory of the buffers stacked on top**
+- **`fillOpacity`** — readable as 0-1 at `layer.fillOpacity`, and a different thing from `opacity`. Not handled this time; whether a value below 1 should raise an unsupported mark is undecided
 
-## 確認方法
+## How to verify
 
-### 単体テスト（Vitest）
+### Unit tests (Vitest)
 
-Vitestを導入し、[テスト規約](../../.claude/rules/testing.md)に従って`lib/`の純関数をテストする。`test/setup.ts`で`initializeCanvas`のスタブを渡す。
+Bring in Vitest and test the pure functions in `lib/` per the [testing conventions](../../.claude/rules/testing.md). `test/setup.ts` supplies the `initializeCanvas` stub.
 
-- `tree.ts` — `children[0]`が最背面として扱われる／**`"pass through"`のグループの不透明度が子に掛け合わされる**／**分離グループの不透明度は子に掛け合わされず、グループのノードに残る**／`hidden: true`のノードが`visible: false`になる／`name`が`undefined`のとき既定の名前になる
-- `blendMode.ts` — 対応する演算が無いモードが`normal`へフォールバックし、未対応として記録される／`BlendMode`のどの値を渡しても例外を投げない。**対応表そのものの写しをテストに書かない。**「`"multiply"`が`multiply`に写る」と書いても、期待値が表と同じ出どころなので表の誤りを検出できない。対応が正しいかは目視比較（段2）で見る
-- `mask.ts` — マスクのRチャンネルの値がアルファへ移る／マスク矩形の外が`defaultColor`で埋まる／`disabled: true`のマスクが適用されない
-- `limits.ts` — 長辺が上限を超えるドキュメントが弾かれる／長辺は上限内でも面積が上限を超えるドキュメントが弾かれる（16384×16384が代表例）／どちらもちょうど上限のとき通る
+- `tree.ts` — `children[0]` is treated as backmost / **a `"pass through"` group's opacity is multiplied into its children** / **an isolated group's opacity is not, and stays on the group node** / a node with `hidden: true` becomes `visible: false` / an `undefined` `name` becomes the default
+- `blendMode.ts` — a mode with no matching operation falls back to `normal` and is recorded unsupported / no value of `BlendMode` throws. **Do not write a copy of the table itself into the tests.** Asserting that `"multiply"` maps to `multiply` cannot catch an error in the table, because the expected value comes from the same place the table does. Whether the mapping is right is judged by the side-by-side comparison (stage 2)
+- `mask.ts` — the mask's R channel moves into alpha / outside the mask rectangle is filled with `defaultColor` / a mask with `disabled: true` is not applied
+- `limits.ts` — a document over the edge limit is rejected / a document within the edge limit but over the area limit is rejected (16384×16384 being the case in point) / both pass when exactly at the limit
 
-### 目視比較
+### Side-by-side comparison
 
-`test/fixtures/`へ検証用のPSDを置き、**Alpaca Studio**の表示と並べて見比べる。Photoshopを持っていないため、PSDを概ね正確に表示できる別のアプリを基準にする。何を確かめるためのファイルかは`test/fixtures/README.md`（未作成）に残す。
+Put verification PSDs in `test/fixtures/` and compare against **Alpaca Studio**. Photoshop is not available here, so the reference is another app that displays PSDs roughly faithfully. What each file is for goes in `test/fixtures/README.md` (not written yet).
 
-**比較の前に、比較先でも未対応の要素をオフにする。**調整レイヤーは非表示にし、レイヤー効果はレイヤースタイルのチェックを外す。両方から同じものを抜いた状態で見比べるため、残った差分はすべて合成のバグと判定できる。
+**Before comparing, turn the unsupported elements off on the other side too.** Hide adjustment layers and uncheck layer styles. With the same things removed from both, every remaining difference can be judged a compositing bug.
 
-この手順を決めておかないと比較が成り立たない。調整レイヤーは自分より下の全レイヤーの色を変え、レイヤー効果はレイヤー境界の外にも描かれるため、**適用しないことで食い違うのは未対応の印が付いていないレイヤーの側になる。**「印が付いているもの以外は一致する」という判定はそのままでは使えない。
+Without that step the comparison does not hold up. An adjustment layer changes the color of everything below it, and a layer effect draws outside the layer bounds, so **not applying them makes the difference show up on layers that carry no unsupported mark.** The rule "everything without a mark matches" cannot be used as it stands.
 
-**基準がPhotoshopそのものではない点は引き受ける。**Alpaca StudioとPhotoshopの差はこちらでは検証できないため、両者が食い違う描画モードがあれば見落とす。
+**That the reference is not Photoshop itself is accepted.** The difference between Alpaca Studio and Photoshop cannot be checked here, so a blend mode where those two disagree would be missed.
 
-| フィクスチャ | 段 | 確かめること |
+| Fixture | Stage | What it checks |
 | --- | --- | --- |
-| 単純な重ね（3レイヤー・すべて通常） | 1 | 重ね順が逆になっていない |
-| 入れ子の分離グループ（`blendMode`が`"normal"`） + グループの不透明度50%。中の2枚を重ねておく | 1 | グループの不透明度が子に効く。重なり部分が濃くならない。不透明度が二重に掛かって25%相当になっていない |
-| `"pass through"`のグループ + グループの不透明度50%。中の2枚を重ねておく | 1 | 通過グループの不透明度の扱い。比較先が分離するなら上の行と同じ絵になり、そうでなければ重なり部分が濃くなる。未解決の論点の判定に使う |
-| 一部のレイヤーとグループを非表示にしたもの | 1 | `hidden`の反転を取り違えていない。非表示のグループが中身ごと消える |
-| 乗算・スクリーンのレイヤー | 2 | 描画モードが効く |
-| `blendMode`が`"normal"`のグループの中に乗算レイヤー | 2 | グループの外へ乗算が漏れない（分離されている） |
-| `"pass through"`のグループの中に乗算レイヤー | 2 | グループの外の背景に乗算が効く |
-| レイヤーマスク付きのレイヤー（マスクの矩形をレイヤーより小さく作る） | 3 | マスクで切り抜かれる。マスク矩形の外が消えない |
-| クリッピングマスク（ベースの描画モードを乗算にする） | 3 | 直下のレイヤーの不透明部分だけに表示される。ベースの乗算が効く |
-| 調整レイヤー・レイヤー効果を含むもの | 1 | 未対応の印とTooltipが出る。ファイルは開ける |
+| A simple stack (3 layers, all normal) | 1 | The stacking order is not reversed |
+| Nested isolated groups (`blendMode` `"normal"`) with group opacity 50%, two overlapping layers inside | 1 | Group opacity reaches the children. The overlap does not darken. Opacity is not applied twice, landing at 25% |
+| A `"pass through"` group with opacity 50%, two overlapping layers inside | 1 | How a pass-through group's opacity behaves. If the reference isolates, this matches the row above; otherwise the overlap darkens. Used to settle the open question |
+| Some layers and groups hidden | 1 | `hidden`'s inversion is not backwards. A hidden group disappears with its contents |
+| Multiply and screen layers | 2 | Blend modes take effect |
+| A multiply layer inside a `"normal"` group | 2 | The multiply does not leak outside the group (it is isolated) |
+| A multiply layer inside a `"pass through"` group | 2 | The multiply reaches the background outside the group |
+| A layer with a mask, the mask rectangle made smaller than the layer | 3 | The mask clips. Outside the mask rectangle does not disappear |
+| A clipping mask with the base set to multiply | 3 | It shows only over the opaque part of the layer below. The base's multiply takes effect |
+| Something containing an adjustment layer and layer effects | 1 | The mark and tooltip appear. The file still opens |
 
-### 完成の定義
+### Definition of done
 
-3段に刻む。各段は下の段に依存するが、**どの段で手が止まってもそこまでは動くものが残る。**
+Cut into three stages. Each depends on the one below it, but **whatever stage the work stops at, something that runs is left behind.**
 
-| 段 | 対象 | 完了の判定 |
+| Stage | Covers | Done when |
 | --- | --- | --- |
-| 1 | ファイルを開く・レイヤーツリー・重ね順・表示状態・未対応のUI。**分離モデルの骨格**（グループごとのバッファ・グループの不透明度・`"pass through"`の分岐）まで含む。描画モードはすべて`normal`扱い | 段1のフィクスチャが一致する |
-| 2 | 描画モードの対応表 | 段2のフィクスチャが一致する |
-| 3 | レイヤーマスクとクリッピングマスク | 段3のフィクスチャが一致する |
+| 1 | Opening a file, the layer tree, stacking order, visibility, the unsupported UI. Includes **the skeleton of the isolated model** — per-group buffers, group opacity, the `"pass through"` branch. Every blend mode treated as `normal` | The stage 1 fixtures match |
+| 2 | The blend mode table | The stage 2 fixtures match |
+| 3 | Layer masks and clipping masks | The stage 3 fixtures match |
 
-**分離モデルの骨格を段2ではなく段1に置く。**グループの不透明度を正しく出すにはグループごとのバッファが要る。子へ掛け合わせて1枚に描くと、子同士が重なった部分が濃くなり、段1のフィクスチャの確認内容（「重なり部分が濃くならない」）を満たせない。段2で足すのは`blendMode`の対応表だけにする。
+**The isolated model's skeleton goes in stage 1, not stage 2.** Getting group opacity right requires per-group buffers. Multiplying into the children and drawing into one surface darkens the overlaps, which fails what the stage 1 fixture checks ("the overlap does not darken"). All stage 2 adds is the `blendMode` table.
 
-未対応要素のUI（印・Tooltip・件数）は段1に入れる。合成の進み方と関係なく作れるうえ、段2・段3の判定にこれ自体が要る。ただし段1では対応表がまだ無いので、この時点で印が付くのは調整レイヤーとレイヤー効果だけになる。
+The unsupported UI — mark, tooltip, count — goes in stage 1. It can be built independently of how compositing progresses, and stages 2 and 3 need it to make their own judgments. At stage 1 there is no table yet, so the only things marked are adjustment layers and layer effects.
 
-段3まで通り、`npm test`が通った時点でこのバージョンを完成とする。
+This version is finished when stage 3 passes and `npm test` passes.
