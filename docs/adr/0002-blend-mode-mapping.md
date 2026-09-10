@@ -3,97 +3,97 @@ status: accepted
 date: 2026-09-07
 ---
 
-# 描画モードはCanvas 2Dへ写せる17個だけ対応し、残りはnormalへ倒す
+# Support the 17 blend modes Canvas 2D can express and fall back to normal for the rest
 
-## 背景と課題
+## Context
 
-[ADR-0001](0001-psd-parser.md)で`ag-psd`を選んだ理由は描画モードとグループの表示切替が扱えることだった。そのADRは「描画モードをCanvas 2Dの`globalCompositeOperation`にどこまで対応させるかは別途決める」として判断を残している。ここで決める。
+[ADR-0001](0001-psd-parser.md) chose `ag-psd` because it can handle blend modes and per-group visibility, and left one thing open: "how far blend modes map onto Canvas 2D's `globalCompositeOperation` is decided separately". This decides it.
 
-範囲は`lib/psd/blendMode.ts`の対応表と、`lib/psd/composite.ts`がそれをどう使うかまで。仕様は[PSDビューア（最初のバージョン）](../design/psd-viewer-v1.md)。
+The scope is the mapping table in `lib/psd/blendMode.ts` and how `lib/psd/composite.ts` uses it. The spec is [the PSD viewer's first version](../design/psd-viewer-v1.md).
 
-`ag-psd`の`BlendMode`型は31個あるが、**PSDのレイヤーから実際に返るのは28個**（`node_modules/ag-psd/dist/helpers.js`の`toBlendMode`）。残る`linear height`・`height`・`subtraction`はディスクリプタ経由（レイヤー効果・ベクトルストローク）でしか出ないため、`layer.blendMode`には現れない。
+`ag-psd`'s `BlendMode` type has 31 members, but **only 28 come back on a PSD layer** (`toBlendMode` in `node_modules/ag-psd/dist/helpers.js`). The other three — `linear height`, `height`, `subtraction` — only ever arrive through a descriptor (a layer effect or a vector stroke), so they never appear on `layer.blendMode`.
 
-28個から`pass through`（グループの構造の話で合成演算ではない）を除いた27個のうち、Canvas 2Dの`globalCompositeOperation`に**同じ名前の演算があるのは16個**。残る11個をどうするかがここで決めることになる。
+Removing `pass through` from those 28 — it describes group structure, not a compositing operation — leaves 27, of which **16 have an operation of the same name** in Canvas 2D's `globalCompositeOperation`. What to do with the remaining 11 is what gets decided here.
 
-| | 内訳 |
+| | Members |
 | --- | --- |
-| 名前が対応する16個 | `normal`・`darken`・`multiply`・`color burn`・`lighten`・`screen`・`color dodge`・`overlay`・`soft light`・`hard light`・`difference`・`exclusion`・`hue`・`saturation`・`color`・`luminosity` |
-| 名前は違うが写せる1個 | `linear dodge` → `lighter`（後述） |
-| 写せない10個 | `dissolve`・`linear burn`・`darker color`・`lighter color`・`vivid light`・`linear light`・`pin light`・`hard mix`・`subtract`・`divide` |
+| 16 that match by name | `normal`, `darken`, `multiply`, `color burn`, `lighten`, `screen`, `color dodge`, `overlay`, `soft light`, `hard light`, `difference`, `exclusion`, `hue`, `saturation`, `color`, `luminosity` |
+| 1 that maps under a different name | `linear dodge` → `lighter` (below) |
+| 10 with no mapping | `dissolve`, `linear burn`, `darker color`, `lighter color`, `vivid light`, `linear light`, `pin light`, `hard mix`, `subtract`, `divide` |
 
-## 判断基準
+## Decision criteria
 
-趣味の個人開発なので、次を最優先する。
+This is a personal project, so what comes first is:
 
-1. **一人で保守できるか** — 実装量と、半年後に自分が読めるか
-2. Photoshopとの見た目の一致
-3. 描画速度
+1. **Whether one person can maintain it** — how much code it is, and whether it is still readable in six months
+2. Matching what Photoshop shows
+3. Rendering speed
 
-速度を最下位にしたのは、このバージョンが**ファイルを開いたときに1回描くだけ**で、毎フレーム再描画しないため。表示切替や不透明度スライダーを足すときに順位が変わりうる。
+Speed comes last because this version **draws once when a file is opened** and never redraws per frame. That ranking can change once visibility toggles and an opacity slider are added.
 
-## 検討した選択肢
+## Options considered
 
-- `globalCompositeOperation`へ写せるものだけ写し、残りは`normal`へ倒して未対応の印を出す
-- 16個に加えて、式が単純なもの（`linear burn`・`linear dodge`・`subtract`・`divide`等）を自前のピクセル演算で埋める
-- Canvasの合成演算を使わず、27個すべてを自前のピクセル演算で実装する
-- 今は決めない。v1はすべて`normal`扱いにし、対応表を次のバージョンへ回す
+- Map what maps onto `globalCompositeOperation`, fall back to `normal` for the rest, and mark those as unsupported
+- Add to the 16 by implementing the simple formulas (`linear burn`, `linear dodge`, `subtract`, `divide`, and so on) as pixel math
+- Drop Canvas compositing entirely and implement all 27 as pixel math
+- Do not decide yet. Treat everything as `normal` in v1 and push the mapping to a later version
 
-倒し先については別に3案を比べた。すべて`normal`／系統の近いモードへ倒す／レイヤーごと隠す。
+The fallback target was compared separately across three options: everything to `normal`, to the nearest related mode, or hide the layer entirely.
 
-## 決定
+## Decision
 
-**写せる17個を`globalCompositeOperation`へ写し、残り10個は`normal`へ倒して未対応の印を出す。**
+**Map the 17 that can be mapped onto `globalCompositeOperation`, fall back to `normal` for the remaining 10, and mark those as unsupported.**
 
-最優先の基準「一人で保守できるか」で他を明確に上回るため。対応表は`Record<BlendMode, GlobalCompositeOperation | null>`1つで済み、`composite.ts`の合成パイプラインは今のまま「レイヤーのバッファを親へ`drawImage`する」で変わらない。
+It wins clearly on the top criterion, whether one person can maintain it. The mapping is a single `Record<BlendMode, GlobalCompositeOperation | null>`, and `composite.ts`'s pipeline stays what it already is: `drawImage` a layer's buffer into its parent.
 
-自前のピクセル演算を入れる案（2番目・3番目）は、**合成パイプラインの構造を変える**点で退けた。Canvasの合成演算は下地を暗黙に扱うが、自前の演算は下地が要る。親バッファを`getImageData`で読み、JSで合成し、`putImageData`で書き戻す経路が必要になる。部分実装（2番目）ではCanvas任せと自前の2系統が同居し、「どこまでを単純な式とするか」の線引きも自分で持つことになる。
+The two pixel-math options were rejected for **changing the shape of the compositing pipeline**. Canvas compositing takes the backdrop into account implicitly; pixel math needs it explicitly, which means reading the parent buffer back with `getImageData`, compositing in JS, and writing it back with `putImageData`. The partial version also leaves two systems side by side, Canvas-driven and hand-written, plus a line you have to draw yourself around what counts as a "simple formula".
 
-「今は決めない」（4番目）は、[仕様書](../design/psd-viewer-v1.md)の完成の定義の段2が丸ごと空になる。ADR-0001が描画モードを理由に`ag-psd`を選んでいるため、選定の前提を検証しないまま進むことになり、退けた。
+"Do not decide yet" would leave stage 2 of the [spec](../design/psd-viewer-v1.md)'s definition of done entirely empty. Since ADR-0001 chose `ag-psd` *because* of blend modes, it would also mean carrying on without ever testing the premise of that choice.
 
-倒し先を`normal`にしたのは、**未対応を未対応のまま見せるため。**系統の近いモードへ倒すと見た目はPhotoshopに近づくが、差分を見たときに「倒し先の選び方が悪いのか合成がバグっているのか」の判別が要る。このバージョンの目的は「正しく表示されているか」を判断できることなので、判別のしやすさを取った。倒し先の選定根拠を自分で背負わずに済む点も、最優先の基準に沿う。
+The fallback is `normal` **so that unsupported stays visibly unsupported.** Falling back to a related mode looks closer to Photoshop, but then a visible difference needs telling apart: bad choice of fallback, or a compositing bug? The point of this version is to be able to judge whether the picture is correct, so being able to tell those apart wins. It also avoids having to justify the choice of fallback, which suits the top criterion.
 
-### `linear dodge`を`lighter`へ写す
+### Mapping `linear dodge` to `lighter`
 
-**`lighter`はブレンドモードではなく加算合成（Porter-DuffのPLUS）だが、下地が不透明なら覆い焼き(リニア)と完全に一致する。**Chromeで実測した結果は次のとおり。
+**`lighter` is not a blend mode but additive compositing (Porter-Duff PLUS), and it agrees exactly with linear dodge when the backdrop is opaque.** Measured in Chrome:
 
-| 条件 | 結果 |
+| Condition | Result |
 | --- | --- |
-| 下地・ソースとも不透明 | 色・アルファとも一致 |
-| 加算が255で飽和する組み合わせ | 一致 |
-| ソースが半透明（下地は不透明） | 一致 |
-| 下地が透明 | 一致 |
-| **下地が半透明** | **アルファも加算され、本来より不透明になる**（source-overなら191のところが255） |
+| Backdrop and source both opaque | Color and alpha both match |
+| Combinations where the sum saturates at 255 | Match |
+| Semi-transparent source, opaque backdrop | Match |
+| Transparent backdrop | Match |
+| **Semi-transparent backdrop** | **Alpha is summed too, coming out more opaque than it should** (255 where source-over gives 191) |
 
-食い違うのは下地が半透明のときだけで、実際に効くのはグループ内で下のレイヤーが覆っていない領域とアンチエイリアスの縁。`normal`へ倒すと全面が間違うので、それより明確に近い。
+The only divergence is a semi-transparent backdrop, which in practice means the areas inside a group that lower layers do not cover, and antialiased edges. Falling back to `normal` would be wrong everywhere, so this is clearly closer.
 
-**この写し方は「系統の近いモードへ倒す」とは別物として扱う。**後者を退けたのは、差分を見たときに倒し先の選び方の問題か合成のバグかの判別が要るため。`lighter`は近似ではなく、条件付きで厳密に一致する。そのため未対応の印は出さない。大半のケースで一致するものに印を出すと、印そのものが無視されるようになる。
+**This mapping is treated as a different thing from "fall back to a related mode".** That was rejected because a visible difference would need telling apart from a compositing bug. `lighter` is not an approximation — it agrees exactly, under a condition. So no unsupported mark is shown for it. Marking something that matches in most cases teaches the reader to ignore the mark.
 
-同じ手が使える描画モードは他に無い。残り10個にはCanvas 2Dに対応する演算が存在しない。
+No other blend mode admits the same trick. The remaining 10 have no corresponding operation in Canvas 2D.
 
-### 結果
+### Consequences
 
-- 良い点: 対応表がデータ1つで済む。合成パイプラインが1系統のままで、`getImageData`による読み戻しが要らない。写せる17個は`globalCompositeOperation`の実装に乗るので、式を自分で検証しなくてよい
-- 良い点: 未対応が10個と確定するので、UIの印とTooltipに出す文言が具体的に書ける
-- 悪い点: **10個を使ったPSDはPhotoshopと絵が違う。**特に`linear burn`は影やコントラストを締める用途で使われ、`normal`へ倒すと明るく見える
-- 悪い点: 印は出るが差は残る。「未対応の印が付いているもの以外は一致する」という判定に、Photoshop側でも該当レイヤーを非表示にする手間が加わる
-- 悪い点: 10個すべて式は単純で、やろうと思えば計算できる（`dissolve`のディザパターンを除く）。**できるのにやらない**という判断なので、実用でつまずいたときに繰り返し再検討したくなる
-- 悪い点: `linear dodge`は下地が半透明のとき本来より不透明になる。印を出さない方針にしたため、この差は画面上では区別が付かない
+- Good: the mapping is a single piece of data. The compositing pipeline stays one system, with no `getImageData` read-back. The 17 that map ride on `globalCompositeOperation`'s implementation, so the formulas need no verification of their own
+- Good: with unsupported fixed at 10, the UI mark and its tooltip can say something specific
+- Bad: **a PSD using any of the 10 looks different from Photoshop.** `linear burn` especially, which is used to tighten shadows and contrast, comes out lighter under `normal`
+- Bad: the mark appears but the difference stays. "Everything without a mark matches" now also requires hiding those layers on the Photoshop side to check
+- Bad: all 10 have simple formulas and could be computed (`dissolve`'s dither pattern aside). It is a decision to **not do something doable**, which invites re-litigating it every time it bites in practice
+- Bad: `linear dodge` comes out more opaque than it should over a semi-transparent backdrop. Since no mark is shown, that difference is indistinguishable on screen
 
-### 確認済み
+### Confirmed
 
-実物のPSDをPhotoshopと見比べて確認した。
+Checked against real PSDs side by side with Photoshop.
 
-- `soft light`と非分離モード（`hue`・`saturation`・`color`・`luminosity`）はPhotoshopと一致する。Canvas 2Dの実装が同じ式かは仕様上の保証が取れていなかったが、実物で問題が出なかった
-- 実用のPSDで最も当たるのは`linear dodge`だった。これが`lighter`を採る判断につながった
+- `soft light` and the non-separable modes (`hue`, `saturation`, `color`, `luminosity`) match Photoshop. Whether Canvas 2D uses the same formulas was not guaranteed by the spec, but nothing went wrong on real files
+- The mode hit most often in practical PSDs was `linear dodge`. That is what led to adopting `lighter`
 
-### 未確認
+### Unconfirmed
 
-- 残り10個それぞれが実際のPSDでどれくらい使われるかを数えていない。`linear burn`が「よく使われる」は一般的な印象に基づく
-- `linear dodge`の半透明な下地での差が、実物のPSDで目に見える大きさになるかを確かめていない
+- How often each of the remaining 10 actually shows up in real PSDs has not been counted. "`linear burn` is common" rests on general impression
+- Whether `linear dodge`'s divergence over a semi-transparent backdrop is visible at all in a real PSD has not been checked
 
-## 補足
+## Notes
 
-- 見直しの目安は、実用のPSDを開いて残り10個のいずれかに繰り返し当たったとき。そのときは2番目の選択肢（式が単純なものだけ自前で埋める）へ移る。移行時に書き直すのは`blendMode.ts`と`composite.ts`のレイヤー合成部分で、`tree.ts`とマスク処理には及ばない
-- **この見直しは一度発火している。**当初は`linear dodge`も`normal`へ倒していたが、実物のPSDで繰り返し当たったため見直した。その際に`lighter`という選択肢を最初の検討で見落としていたことが分かり、自前実装へ移らずに済んだ。次に当たったときも、まずCanvasの合成演算で代用できないかを確かめる
-- `pass through`は対応表に載せない。グループを分離するかどうかの分岐で、合成演算ではない。扱いは[仕様書](../design/psd-viewer-v1.md)の合成アルゴリズムを参照
-- 対応表の値が`null`のとき未対応として記録し、描画は`source-over`で続ける。この判定は`lib/`の純関数なので単体テストの対象になる（[テスト規約](../../.claude/rules/testing.md)）
+- Revisit when a practical PSD repeatedly hits one of the remaining 10. At that point the move is to the second option, filling in only the simple formulas. That rewrite touches `blendMode.ts` and the layer-compositing part of `composite.ts`, and reaches neither `tree.ts` nor the mask handling
+- **This revisit has already fired once.** `linear dodge` originally fell back to `normal`, and real PSDs hit it repeatedly. Reworking it surfaced `lighter`, an option missed in the first round, which avoided moving to pixel math. Next time, check again whether a Canvas compositing operation can stand in before writing any
+- `pass through` is not in the mapping. It decides whether a group is isolated; it is not a compositing operation. Its handling is in the [spec](../design/psd-viewer-v1.md)'s compositing algorithm
+- When the mapping holds `null`, record the layer as unsupported and carry on drawing with `source-over`. That check is a pure function in `lib/`, so it is unit tested ([testing conventions](../../.claude/rules/testing.md))

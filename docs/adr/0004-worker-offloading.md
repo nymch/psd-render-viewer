@@ -3,87 +3,87 @@ status: accepted
 date: 2026-09-10
 ---
 
-# パースと合成をWeb Workerへ逃がし、Workerは読み込みごとに使い捨てる
+# Move parsing and compositing into a Web Worker, and throw the worker away after each load
 
-## 背景と課題
+## Context
 
-100MB級のPSDを開くと、読み込み中にUIが固まる。`ag-psd`の`readPsd`が同期関数なので、パースの間メインスレッドが止まる。実データ（120〜170MB・70レイヤー）で体感できる長さになる。
+Opening a 100MB-class PSD freezes the UI while it loads. `ag-psd`'s `readPsd` is synchronous, so the main thread stops for the whole parse. On real data (120-170MB, 70 layers) that is long enough to feel.
 
-同じ時期に報告された症状は3つあり、うち2つは別の手当てで解決済み。
+Three symptoms were reported around the same time, two of which are already fixed by other means.
 
-| | 症状 | 状態 |
+| | Symptom | Status |
 | --- | --- | --- |
-| A | 繰り返し読むと劣化していく | 解決。展開済みピクセルを使い道なく保持していたのをやめた |
-| C | 120MB超が開けない | 解決。`totalMemoryLimit`を4GBへ明示した |
-| B | **1回ごとの読み込みで固まる** | **この決定の対象** |
+| A | Degrades as loads repeat | Fixed. Stopped holding decoded pixels that had no further use |
+| C | Over 120MB will not open | Fixed. `totalMemoryLimit` is now set to 4GB explicitly |
+| B | **Freezes on every individual load** | **What this decision addresses** |
 
-[ADR-0003](0003-deferred-layer-decoding.md)で検討したレイヤー展開の遅延はメモリを減らす手で、Bには効かない。合成にデコード時間が乗るだけで、止まる時間は変わらない。
+The deferred layer decoding considered in [ADR-0003](0003-deferred-layer-decoding.md) is a way to use less memory and does nothing for B. It moves decode time into compositing; the stall is the same length.
 
-[仕様書](../design/psd-viewer-v1.md)はWeb Workerを「やらないこと」に入れていた。理由は「合成の正しさを詰めるのが主題で、Workerを同時に入れると絵の異常が合成のバグか転送の問題か切り分けにくい」。**合成の正しさは実データで確認できたため、この理由は失効している。**
+The [spec](../design/psd-viewer-v1.md) had put Web Workers under out of scope, on the grounds that "getting compositing right is the point, and adding a worker at the same time makes it hard to tell a wrong picture from a transfer problem". **Compositing has since been confirmed correct against real data, so that reason has lapsed.**
 
-範囲は`lib/psd/worker.ts`（新規）・`workerMessage.ts`（新規）・`hooks/psdHooks.ts`・ファイルを受け取る2つのコンポーネント。
+The scope is `lib/psd/worker.ts` (new), `workerMessage.ts` (new), `hooks/psdHooks.ts`, and the two components that receive a file.
 
-## 判断基準
+## Decision criteria
 
-1. **読み込み中もUIが反応すること** — これが解こうとしている症状そのもの
-2. **メモリを持ち越さないこと** — このプロジェクトで繰り返し痛んだのが保持の問題
-3. 一人で保守できること
+1. **The UI stays responsive while loading** — this is the symptom being solved
+2. **Nothing carries over in memory** — holding on to things is what has repeatedly hurt this project
+3. Maintainable by one person
 
-## 検討した選択肢
+## Options considered
 
-**Workerの寿命**
+**The worker's lifetime**
 
-- 読み込みごとに生成し、完了・失敗・差し替えでterminateする
-- 最初の読み込みで生成し、その後は使い回す
-- 使い回しを基本にしつつ、差し替え時だけterminateして作り直す
+- Create one per load and terminate on completion, failure, or replacement
+- Create one on the first load and reuse it thereafter
+- Reuse by default, but terminate and rebuild when a load is replaced
 
-**合成結果の渡し方**
+**How the composited result comes back**
 
-- `ImageBitmap`を転送する
-- RGBAの`ArrayBuffer`を転送し、メインスレッドで`putImageData`する
-- `transferControlToOffscreen`で表示用Canvasの制御をWorkerへ渡す
+- Transfer an `ImageBitmap`
+- Transfer an RGBA `ArrayBuffer` and `putImageData` it on the main thread
+- Hand the display canvas to the worker with `transferControlToOffscreen`
 
-## 決定
+## Decision
 
-**読み込みごとにWorkerを生成し、完了・失敗・差し替えでterminateする。合成結果は`ImageBitmap`ではなくRGBAの`ArrayBuffer`を転送する。**
+**Create a worker per load and terminate it on completion, failure, or replacement. Transfer the composited result as an RGBA `ArrayBuffer` rather than an `ImageBitmap`.**
 
-### 使い捨てにする理由
+### Why throw it away
 
-基準2に直接効く。展開済みピクセルがWorkerごと消えるため、解放漏れが構造的に起きない。中断もterminateだけで済み、同期実行中の`readPsd`を止める唯一の方法でもある。
+It acts directly on criterion 2. Decoded pixels die with the worker, so a leak cannot happen structurally. Cancellation is just a terminate, which is also the only way to stop a `readPsd` that is running synchronously.
 
-実測でも効果が出た。105MBのPSD（デコード後137MB）を8回続けて開いたときの定常RSSが**1450MBから1024MBへ下がった**。使い回していれば前のファイルの残骸が積み上がる。
+Measurement bore it out too. Opening a 105MB PSD (137MB decoded) eight times in a row, steady-state RSS **fell from 1450MB to 1024MB**. Reuse would leave the previous file's remains stacking up.
 
-代償はWorkerの起動コストが毎回かかること。同じ条件で読み込み時間が235〜360msから320〜480msへ伸びた。UIが止まらなくなった以上、この差は体感に出ない。
+The cost is paying worker startup every time. Under the same conditions, load time went from 235-360ms to 320-480ms. With the UI no longer stalling, that difference does not register.
 
-### `ImageBitmap`を転送しない理由
+### Why not to transfer an `ImageBitmap`
 
-**Chromeでは`ImageBitmap`の実体がWorkerの寿命に紐づいており、転送したあとでもWorkerをterminateすると中身が失われる。**
+**In Chrome an `ImageBitmap` is backed by the worker's lifetime: terminate the worker and the contents are lost, even after the transfer.**
 
-実装して実測で踏んだ。Worker内では合成が正しくできている（対象のピクセルが`[140,100,60,255]`、不透明ピクセル40000）のに、メインスレッドで受け取ったビットマップは寸法だけ正しく中身が空だった。`terminate()`を外すと正しく描けたことで切り分けられた。
+Found by implementing it and measuring. Compositing was correct inside the worker (the sampled pixel read `[140,100,60,255]`, 40000 opaque pixels), yet the bitmap received on the main thread had the right dimensions and no contents. Removing `terminate()` made it draw correctly, which isolated it.
 
-**使い捨てにする判断と`ImageBitmap`の転送は両立しない。**`ArrayBuffer`は寿命に依存しないので、そちらを転送する。コストは`getImageData`の読み戻しとメインスレッドでの`putImageData`。
+**Throwing the worker away and transferring an `ImageBitmap` are incompatible.** An `ArrayBuffer` does not depend on a lifetime, so that is what gets transferred. The cost is a `getImageData` read-back plus a `putImageData` on the main thread.
 
-`transferControlToOffscreen`は退けた。Canvas要素につき一度しか転送できないため、Workerを使い捨てる設計と両立しない。
+`transferControlToOffscreen` was rejected: a canvas element can only be transferred once, which does not go together with disposable workers.
 
-### 結果
+### Consequences
 
-- 良い点: 読み込み中もレイヤーパネルの折りたたみや倍率の切り替えが効く。実測で確認した
-- 良い点: 定常RSSが1450MBから1024MBへ下がった。Workerごと破棄する副次効果
-- 良い点: 読み込み中に別のファイルを落とすと差し替わる。中断がterminateだけで済むので、入力を無効化する必要がなくなった
-- 良い点: 同期パースのために入れていた二重`requestAnimationFrame`が不要になった。メインスレッドが止まらないので、ローディング表示は普通に描かれる
-- 悪い点: 読み込み時間が235〜360msから320〜480msへ伸びた。Workerの起動と`getImageData`の読み戻し、転送の分
-- 悪い点: 経路が増えた。絵が違うときに合成のバグか転送の問題かの切り分けが要る。仕様がWorkerを保留した理由がそのまま残る
-- 悪い点: **`ag-psd`はWorker内で`initializeCanvas`を呼ばないと落ちる。**忘れると`"Canvas not initialized"`になる。ブラウザでの自動初期化は`typeof document !== "undefined"`が条件で、Workerは通らない
-- 悪い点: `self`の型が合わない。`tsconfig.json`の`lib`が`dom`を含むため`Window`として型が付き、`webworker`を足すと識別子が衝突する。使う分だけの型を書いて1回`as`で受け直している
+- Good: collapsing a group in the layer panel and switching zoom both work while a file is loading. Confirmed by measurement
+- Good: steady-state RSS fell from 1450MB to 1024MB, a side effect of discarding the whole worker
+- Good: dropping another file mid-load replaces the current one. Cancellation is just a terminate, so the input no longer has to be disabled
+- Good: the double `requestAnimationFrame` that synchronous parsing required is gone. With the main thread free, the loading indicator paints normally
+- Bad: load time went from 235-360ms to 320-480ms — worker startup, the `getImageData` read-back, and the transfer
+- Bad: there is one more path. A wrong picture now needs telling apart from a transfer problem, exactly the reason the spec deferred workers
+- Bad: **`ag-psd` throws inside a worker unless `initializeCanvas` is called.** Forget it and you get `"Canvas not initialized"`. Its automatic setup in the browser is conditional on `typeof document !== "undefined"`, which a worker does not satisfy
+- Bad: the type of `self` does not fit. `tsconfig.json`'s `lib` includes `dom`, so it types as `Window`, and adding `webworker` collides on identifiers. It is handled by writing just the types used and re-casting once with `as`
 
-### 未確認
+### Unconfirmed
 
-- Workerの起動コストを単独で測っていない。読み込み時間の増分（約100ms）には`getImageData`の読み戻しと転送も含まれる
-- Chrome以外で`ImageBitmap`の寿命が同じ振る舞いをするかを確認していない。Safariでは転送後も生きる可能性があるが、確かめていない
-- 巨大なドキュメントで`getImageData`の読み戻しがどれくらいかかるかを測っていない。GPUからの読み戻しはサイズに比例するため、上限付近では無視できない可能性がある
+- Worker startup cost has not been measured on its own. The added load time (around 100ms) also contains the `getImageData` read-back and the transfer
+- Whether `ImageBitmap` lifetimes behave the same outside Chrome has not been checked. Safari may keep it alive after the transfer, unverified
+- How long the `getImageData` read-back takes on a huge document has not been measured. Reading back from the GPU scales with size, so near the ceiling it may not be negligible
 
-## 補足
+## Notes
 
-- 見直しの目安は、読み込み時間の増分が体感に出るようになったとき。そのときは使い回しへ寄せることになるが、メモリの持ち越しを自分で保証する必要が出る
-- この決定は[ADR-0003](0003-deferred-layer-decoding.md)を覆さない。あちらは保留のまま。AとCが解決し、Bもこの決定で解決したため、遅延展開の動機はほぼ残っていない
-- `lib/psd/`のパースと合成は無改造でWorkerへ移った。`composite.ts`をDOM非依存（`OffscreenCanvas`と`ImageData`だけ）に書いておいた狙いが機能した
+- Revisit when the added load time starts to register. The move then is toward reuse, which means guaranteeing that nothing carries over in memory yourself
+- This decision does not overturn [ADR-0003](0003-deferred-layer-decoding.md), which stays on hold. With A and C fixed and B solved here, almost nothing is left of the motivation for deferred decoding
+- Parsing and compositing in `lib/psd/` moved into the worker unmodified. Writing `composite.ts` free of the DOM — `OffscreenCanvas` and `ImageData` only — paid off exactly as intended
