@@ -4,9 +4,9 @@ import {useAtomValue} from "jotai";
 import {loadAttemptAtom} from "@/atoms/document";
 
 /**
- * 最後に開こうとして失敗したファイルを下端に出す。
- * ツールバーのファイル名は表示中のドキュメントのもので、この2つは食い違いうるため、
- * どちらも常にファイル名を添える。
+ * Shows the file that most recently failed to open, along the bottom.
+ * The filename in the toolbar belongs to the document on display, and the two can disagree, so
+ * both always carry a filename.
  */
 export function LoadError() {
   const attempt = useAtomValue(loadAttemptAtom);

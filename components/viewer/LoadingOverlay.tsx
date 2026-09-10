@@ -4,11 +4,12 @@ import {useAtomValue} from "jotai";
 import {loadAttemptAtom} from "@/atoms/document";
 
 /**
- * 読み込み中の表示。
+ * The loading indicator.
  *
- * Canvasと兄弟に置くと横並びになり、前の描画の真横に文言が出てレイアウトが動く。
- * スクロールしない領域に重ねることで、位置が動かず前の描画も透けて見える。
- * パースは同期実行で画面全体が固まるので、パネルまで覆って構わない。
+ * Placed as a sibling of the canvas it would sit alongside, putting the text right next to the
+ * previous render and shifting the layout. Laid over the non-scrolling region instead, it stays
+ * put and the previous render shows through.
+ * Parsing runs synchronously and freezes the whole screen, so covering the panel too is fine.
  */
 export function LoadingOverlay() {
   const attempt = useAtomValue(loadAttemptAtom);

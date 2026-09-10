@@ -5,15 +5,15 @@ export const UNNAMED_LAYER = "(名称未設定)";
 
 export type Bounds = {left: number; top: number; right: number; bottom: number};
 
-/** ピクセルデータの実体はrefに置き、ノードはこのidだけを持つ */
+/** Pixel data itself lives on a ref; a node holds only this id */
 export type PixelId = string;
 
 export type PixelStore = Map<PixelId, PixelSource>;
 
 /**
- * ag-psdの`PixelData`のうち、描画に使う部分だけを写したもの。
- * `ImageData`のコンストラクタは`SharedArrayBuffer`由来の配列を受け付けないため、
- * バッファの型まで絞った形で持つ。
+ * The part of ag-psd's `PixelData` that drawing actually uses.
+ * `ImageData`'s constructor does not accept an array backed by a `SharedArrayBuffer`, so this
+ * is narrowed all the way down to the buffer type.
  */
 export type PixelSource = {
   data: Uint8ClampedArray<ArrayBuffer>;
@@ -23,7 +23,7 @@ export type PixelSource = {
 
 export type MaskRef = {
   bounds: Bounds;
-  /** マスク矩形の外側の値（0または255） */
+  /** The value outside the mask rectangle, 0 or 255 */
   defaultColor: number;
   pixelId: PixelId;
 };
@@ -39,15 +39,15 @@ type NodeCommon = {
   id: string;
   name: string;
   visible: boolean;
-  /** PSDが持つ値そのまま（0〜1）。レイヤーパネルに出す */
+  /** The PSD's own value (0-1), as it is. Shown in the layer panel */
   opacity: number;
   /**
-   * 合成で使う不透明度。祖先の`"pass through"`グループの分を掛け合わせてある。
-   * 分離グループは自分のバッファへ掛けるため、子はここで1へリセットされる。
+   * The opacity compositing uses, with any ancestor `"pass through"` groups already multiplied
+   * in. An isolated group applies its own to its buffer, so its children are reset to 1 here.
    */
   renderOpacity: number;
   blendMode: BlendMode;
-  /** 未対応の描画モードはnormalへ倒した後の値 */
+  /** For an unsupported blend mode, the value after falling back to normal */
   compositeOperation: GlobalCompositeOperation;
   clipping: boolean;
   bounds: Bounds;
@@ -57,13 +57,13 @@ type NodeCommon = {
 
 export type LayerLeaf = NodeCommon & {
   kind: "layer";
-  /** ピクセルを持たないレイヤー（調整レイヤー等）ではnull */
+  /** Null on a layer that carries no pixels, such as an adjustment layer */
   pixelId: PixelId | null;
 };
 
 export type LayerGroup = NodeCommon & {
   kind: "group";
-  /** `"pass through"`以外なら自分のバッファへ合成する */
+  /** Anything other than `"pass through"` composites into a buffer of its own */
   isolated: boolean;
   children: LayerNode[];
 };
@@ -104,7 +104,7 @@ function buildNode(
   const id = `node-${counter.value++}`;
   const isGroup = layer.children !== undefined;
 
-  // Photoshopの既定はレイヤーが「通常」、グループが「通過」
+  // Photoshop defaults a layer to normal and a group to pass through
   const blendMode: BlendMode = layer.blendMode ?? (isGroup ? "pass through" : "normal");
   const opacity = layer.opacity ?? 1;
   const {operation, isSupported} = resolveBlendMode(blendMode);
@@ -114,7 +114,7 @@ function buildNode(
   if (layer.adjustment !== undefined) unsupported.push({kind: "adjustment-layer"});
   if (layer.effects !== undefined) unsupported.push({kind: "layer-effects"});
   if (layer.vectorMask !== undefined) unsupported.push({kind: "vector-mask"});
-  // 明示的にfalseのときだけ未対応。undefinedはPhotoshopの既定であるオンとして扱う
+  // Unsupported only when explicitly false. undefined is Photoshop's default, which is on
   if (layer.blendClippendElements === false) {
     unsupported.push({kind: "clipped-elements-ungrouped"});
   }
@@ -122,7 +122,7 @@ function buildNode(
   const common: NodeCommon = {
     id,
     name: layer.name ?? UNNAMED_LAYER,
-    // ag-psdのhiddenは意味が反転している
+    // ag-psd's hidden means the opposite of what it reads like
     visible: !layer.hidden,
     opacity,
     renderOpacity: opacity * inheritedOpacity,
@@ -143,8 +143,8 @@ function buildNode(
     ...common,
     kind: "group",
     isolated,
-    // 分離グループは自分のバッファへrenderOpacityを掛けるので、子へは伝えない。
-    // 通過グループはバッファを持たないため、子へ掛け合わせて渡すしかない。
+    // An isolated group applies renderOpacity to its own buffer, so it is not passed down.
+    // A pass-through group has no buffer, so multiplying it into the children is the only way.
     renderOpacity: isolated ? common.renderOpacity : 1,
     children: buildNodes(
       layer.children ?? [],
@@ -203,9 +203,9 @@ function takeMask(
 }
 
 /**
- * ag-psdの`PixelData`から描画に使える形を取り出す。
- * 8bitのPSDでは`data`がUint8ClampedArrayになる。16bit・32bitではUint16Array／Float32Arrayが
- * 入るためここでnullを返すが、そのようなPSDは`limits.ts`で先に弾いている。
+ * Takes a drawable form out of ag-psd's `PixelData`.
+ * On an 8-bit PSD, `data` is a Uint8ClampedArray. At 16 and 32 bits it holds a Uint16Array or
+ * Float32Array, so this returns null - though `limits.ts` rejects such a PSD first.
  */
 function toPixelSource(
   pixelData: {data: ArrayBufferView; width: number; height: number} | undefined,
@@ -220,14 +220,14 @@ function toPixelSource(
   };
 }
 
-/** `ImageData`へそのまま渡せる配列かを判定する */
+/** Whether the array can be handed to `ImageData` as it is */
 function isDrawableArray(
   data: ArrayBufferView,
 ): data is Uint8ClampedArray<ArrayBuffer> {
   return data instanceof Uint8ClampedArray && data.buffer instanceof ArrayBuffer;
 }
 
-/** 未対応の要素を持つノードを数える。レイヤーパネルのヘッダに出す */
+/** Counts nodes carrying an unsupported element. Shown in the layer panel's header */
 export function countUnsupported(nodes: LayerNode[]): number {
   return nodes.reduce((total, node) => {
     const own = node.unsupported.length > 0 ? 1 : 0;

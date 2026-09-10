@@ -1,18 +1,19 @@
 /**
- * ドキュメントを開けるかどうかの判定。
+ * Whether a document can be opened at all.
  *
- * 上限は長辺と面積の両方で見る。ブラウザのCanvasは辺の長さと面積の両方に制約があり、
- * Chromeの面積上限は268,435,456px（16384×16384ちょうど）。長辺だけを条件にすると
- * 16384×16384が素通りして面積上限に当たる。
+ * Both the longest edge and the area are checked. A browser canvas is constrained on both, and
+ * Chrome's area limit is 268,435,456px (exactly 16384x16384). Testing only for the edge lets a
+ * 16384x16384 document through into the area limit.
  *
- * 面積の上限はメモリから逆算している。ドキュメントサイズで確保されるのは表示用Canvas・
- * ルートのバッファ・合成結果のImageBitmapの3枚で、8192×8192相当なら1枚268MB・3枚で約800MB。
- * どちらの値も仮置きで、実測して調整する。
+ * The area limit is derived from memory. What gets allocated at document size is three
+ * surfaces - the display canvas, the root buffer, and the composited ImageBitmap - which at
+ * 8192x8192 is 268MB each, about 800MB for three. Both values are provisional and get adjusted
+ * by measurement.
  */
 export const MAX_EDGE = 16384;
 export const MAX_AREA = 8192 * 8192;
 
-/** ag-psdのimageDataが本物のImageDataになるのは8bitのときだけ。16bit・32bitは描画できない */
+/** ag-psd's imageData is a real ImageData only at 8 bits. 16- and 32-bit cannot be drawn */
 const SUPPORTED_BITS_PER_CHANNEL = 8;
 
 export type DocumentRejection =
@@ -37,13 +38,13 @@ export function checkDocumentSize(width: number, height: number): DocumentCheck 
 }
 
 /**
- * 16bit・32bitのPSDを弾く。ag-psdはこの場合`imageData`をUint16Array／Float32Arrayを持つ
- * ただのオブジェクトで返し、`putImageData`が受け付けない。
+ * Rejects 16- and 32-bit PSDs. For those, ag-psd returns `imageData` as a plain object holding
+ * a Uint16Array or Float32Array, which `putImageData` will not take.
  */
 export function checkBitsPerChannel(
   bitsPerChannel: number | undefined,
 ): DocumentCheck {
-  // undefinedのときはPSDのヘッダから読めなかったということで、8bitとみなして進める
+  // undefined means it could not be read from the PSD header. Assume 8 bits and carry on
   if (bitsPerChannel === undefined) return {ok: true};
 
   if (bitsPerChannel !== SUPPORTED_BITS_PER_CHANNEL) {

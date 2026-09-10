@@ -10,34 +10,36 @@ import {buildLayerTree} from "@/lib/psd/tree";
 import type {WorkerRequest, WorkerResponse} from "@/lib/psd/workerMessage";
 
 /**
- * PSDのパースと合成を担うWorker。
+ * The worker that parses and composites a PSD.
  *
- * `readPsd`は同期関数なので、メインスレッドで呼ぶとパースの間ずっとUIが止まる。
- * ここへ逃がすことで、100MB級のPSDを読んでいる最中もレイヤーパネルや倍率の操作が効く。
+ * `readPsd` is synchronous, so calling it on the main thread stops the UI for the whole parse.
+ * Moving it here keeps the layer panel and the zoom toggle working while a 100MB-class PSD
+ * loads.
  *
- * 1回の読み込みごとに生成され、結果を返したらメインスレッド側でterminateされる。
- * 展開済みピクセルはWorkerごと消えるため、解放漏れが構造的に起きない。
+ * One worker is created per load and terminated from the main thread once it has replied.
+ * Decoded pixels die with the worker, so a leak cannot happen structurally.
  */
 
 /**
- * **これを忘れると`readPsd`が`"Canvas not initialized"`で落ちる。**
+ * **Forget this and `readPsd` throws `"Canvas not initialized"`.**
  *
- * `ag-psd`は`typeof document !== "undefined"`のときだけcanvasの実装を自動で用意する。
- * Workerには`document`が無いのでその分岐に入らない。`useImageData: true`を指定していても
- * 内部でcanvasを要求するため、`OffscreenCanvas`を渡しておく。
+ * `ag-psd` sets up a canvas implementation automatically only when
+ * `typeof document !== "undefined"`. A worker has no `document`, so it never takes that branch.
+ * It demands a canvas internally even with `useImageData: true`, hence handing it an
+ * `OffscreenCanvas` up front.
  */
 initializeCanvas((width: number, height: number) => {
-  // ag-psdはHTMLCanvasElementを期待するが、実際に使うのはgetContext("2d")だけ。
-  // OffscreenCanvasで要求を満たせる
+  // ag-psd expects an HTMLCanvasElement but only ever uses getContext("2d"),
+  // which an OffscreenCanvas satisfies
   return new OffscreenCanvas(width, height) as unknown as HTMLCanvasElement;
 });
 
 /**
- * Workerのグローバルスコープ。
+ * The worker's global scope.
  *
- * `tsconfig.json`の`lib`は`dom`を含むため`self`は`Window`として型が付く。`webworker`を
- * 足すと`dom`と識別子が衝突して両立できないので、このファイルで使う分だけを型にして
- * 受け直す。Workerの実行時には`DedicatedWorkerGlobalScope`が入っている。
+ * `tsconfig.json`'s `lib` includes `dom`, so `self` types as `Window`. Adding `webworker`
+ * collides with `dom` on identifiers and the two cannot coexist, so only what this file uses is
+ * typed out and re-cast. At run time inside a worker it is a `DedicatedWorkerGlobalScope`.
  */
 type WorkerScope = {
   postMessage(message: WorkerResponse, transfer?: Transferable[]): void;
@@ -48,7 +50,8 @@ const scope = self as unknown as WorkerScope;
 
 function toMessage(error: unknown): string {
   if (!(error instanceof Error)) return String(error);
-  // ag-psdはメモリ予算を使い切るとこのメッセージで投げる。そのままでは何が起きたか伝わらない
+  // ag-psd throws with this message once the memory budget runs out. Left as it is, it says
+  // nothing about what happened
   if (error.message === "Exceeded memory limit") {
     return "PSDが大きすぎて読み込めない";
   }
@@ -81,14 +84,14 @@ scope.onmessage = (event: MessageEvent<WorkerRequest>) => {
       height: psd.height,
     });
 
-    // ImageBitmapではなくRGBAの生データを返す。理由はworkerMessage.tsを参照
+    // Return raw RGBA rather than an ImageBitmap. The reason is in workerMessage.ts
     const context = composited.getContext("2d");
     if (context === null) throw new Error("2Dコンテキストを取得できなかった");
     const image = context.getImageData(0, 0, psd.width, psd.height);
     composited.width = 0;
     pixels.clear();
 
-    // transferできるのは素のArrayBufferだけ。SharedArrayBuffer由来なら渡せない
+    // Only a plain ArrayBuffer can be transferred. One backed by a SharedArrayBuffer cannot
     const buffer = image.data.buffer;
     if (!(buffer instanceof ArrayBuffer)) {
       throw new Error("合成結果を転送できる形で取り出せなかった");

@@ -1,28 +1,30 @@
 import type {LayerNode} from "@/lib/psd/tree";
 
 /**
- * メインスレッドとWorkerでやり取りするメッセージ。
+ * The messages exchanged between the main thread and the worker.
  *
- * 両側で同じ型を使い、`switch`の網羅性チェックを効かせる。
- * 構造化クローンで運べるものだけを載せる。`Error`はクラスが落ちるので文字列に変換して送る。
+ * Both sides use the same types, which makes `switch` exhaustiveness checking work.
+ * Only what structured clone can carry goes in here. An `Error` loses its class, so it is
+ * converted to a string before being sent.
  */
 
 export type WorkerRequest = {
-  /** ファイルの中身。transferableなので所有権ごと渡す */
+  /** The file's contents. Transferable, so ownership goes with it */
   buffer: ArrayBuffer;
 };
 
 export type WorkerResponse =
   | {
       status: "ok";
-      /** 描画パラメータだけのレイヤーツリー。ピクセルは含まない */
+      /** The layer tree, drawing parameters only. No pixels */
       nodes: LayerNode[];
       /**
-       * 合成結果のRGBA。`ImageData`の裏にある`ArrayBuffer`をそのまま渡す。
+       * The composited RGBA. The `ArrayBuffer` behind an `ImageData`, passed as it is.
        *
-       * **`ImageBitmap`を転送してはいけない。**Chromeでは`ImageBitmap`の実体がWorkerの
-       * 寿命に紐づいており、転送したあとでもWorkerをterminateすると中身が失われる。
-       * 読み込みごとにWorkerを破棄する設計とは両立しない。`ArrayBuffer`は寿命に依存しない。
+       * **Never transfer an `ImageBitmap`.** In Chrome an `ImageBitmap` is backed by the
+       * worker's lifetime: terminate the worker and the contents are lost, even after the
+       * transfer. That does not go together with discarding the worker after every load.
+       * An `ArrayBuffer` does not depend on a lifetime.
        */
       pixels: ArrayBuffer;
       width: number;

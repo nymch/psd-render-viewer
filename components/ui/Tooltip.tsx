@@ -15,11 +15,11 @@ const GAP = 4;
 const EDGE = 8;
 
 /**
- * hoverとフォーカスで吹き出しを出す。PSDを知らない汎用部品。
+ * Shows a bubble on hover and on focus. A generic part that knows nothing about PSDs.
  *
- * `position: fixed`で描く。`absolute`にすると、`overflow`を持つ親（レイヤーパネルの
- * スクロール領域）にクリップされて見切れる。位置はビューポートに収まるよう寄せ、
- * 下に入らなければ上へ回す。
+ * Drawn with `position: fixed`. Made `absolute`, it would be clipped by an ancestor carrying
+ * `overflow` - the layer panel's scroll area - and get cut off. It is nudged to stay inside the
+ * viewport, and flips above when it does not fit below.
  */
 export function Tooltip({label, children}: TooltipProps) {
   const [anchor, setAnchor] = useState<Anchor | null>(null);
@@ -37,7 +37,7 @@ export function Tooltip({label, children}: TooltipProps) {
 
   const close = useCallback(() => setAnchor(null), []);
 
-  // 実際の高さは描いてみないと分からないので、描いた後に上下を決め直す
+  // The real height is unknown until it is drawn, so above-or-below is decided afterwards
   useLayoutEffect(() => {
     if (anchor === null || flipUp) return;
     const height = tooltipRef.current?.offsetHeight;
