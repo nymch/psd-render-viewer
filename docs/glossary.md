@@ -1,44 +1,45 @@
-# 用語集
+# Glossary
 
-日本語の表記とコード上の識別子の対応を決める。ドキュメントを書くとき、変数や型に名前を付けるときはこの表に従う。表記が揺れそうな語に気づいたらここへ追加する。
+Fixes the word used for each concept and the identifier it takes in code. Follow this table when writing a document and when naming a variable or a type. When a term looks like it is about to drift, add a row.
 
-日本語表記はAdobe PhotoshopのUIに合わせる。UIの語と違う訳語を独自に当てると、PSDを扱う人との会話が噛み合わなくなる。
+**The 日本語 column is what the app shows its users, not a translation of the English one.** It follows Adobe Photoshop's Japanese UI, because inventing a label of one's own breaks conversation with people who work in Photoshop. UI strings are outside the migration to English and become bilingual through i18n instead — see [ADR-0005](adr/0005-repository-language.md).
 
-## PSDの構造
+## PSD structure
 
-| 日本語 | 識別子 | 説明 |
-| --- | --- | --- |
-| ドキュメント | `document` | 読み込んだPSDファイル1件。ag-psdの`readPsd()`の戻り値 |
-| レイヤー | `Layer`・`layer` | 画像1枚分の要素。「レイヤ」と長音を省かない |
-| レイヤーグループ | `group` | レイヤーをまとめる入れ物。入れ子になりうる。ag-psdでは`children`を持つレイヤーとして表現される |
-| ノード | `node` | レイヤーとグループをまとめて指すときの語。`children`の有無でグループを判別する |
-| レイヤーツリー | `layerTree` | ドキュメント直下からたどれるレイヤーとグループの木構造。`children`でたどる |
-| 描画モード | `blendMode` | 下のレイヤーとの合成方法（通常・乗算・スクリーン等）。**「ブレンドモード」と書かない**。日本語UIの表記は「描画モード」 |
-| 不透明度 | `opacity` | 0〜100%。値の範囲を0〜1で持つ場合はコード内で明示する |
-| 塗りの不透明度 | `fillOpacity` | レイヤー効果を除いた塗りだけの不透明度。`opacity`とは別物 |
-| クリッピングマスク | `clippingMask` | 下のレイヤーの不透明部分で表示を切り抜く指定 |
-| レイヤーマスク | `layerMask` | レイヤーに紐づくグレースケールのマスク |
-| テキストレイヤー | `textLayer` | 文字情報を持つレイヤー |
-| 調整レイヤー | `adjustmentLayer` | 下のレイヤーの色調を変えるレイヤー。ピクセルデータを持たない |
-| スマートオブジェクト | `smartObject` | 元データを保持したまま配置されたレイヤー |
-| アートボード | `artboard` | 1つのPSD内に複数の画面領域を持つ仕組み |
-| 通過 | `"pass through"` | グループの描画モードの1つ。グループの中身を親へそのまま流し、下のレイヤーと合成させる |
-| 分離 | `isolated` | 通過以外のグループのように、子をいったん1枚に合成してから親へ合成すること。**Photoshopの日本語UIには無い語**で、合成モデルを説明するためにこのリポジトリで使う |
-| 未対応 | `unsupported` | このアプリが描画を再現できない要素。UIにこの語で出す。「非対応」「サポート外」と書かない |
+| Term | 日本語 | Identifier | Description |
+| --- | --- | --- | --- |
+| Document | ドキュメント | `document` | One loaded PSD file. What `ag-psd`'s `readPsd()` returns |
+| Layer | レイヤー | `Layer`・`layer` | One image element |
+| Layer group | レイヤーグループ | `group` | A container for layers, which can nest. `ag-psd` represents it as a layer that has `children` |
+| Node | ノード | `node` | Layers and groups taken together. A node is a group when it has `children` |
+| Layer tree | レイヤーツリー | `layerTree` | The tree of layers and groups reachable from the document, walked through `children` |
+| Blend mode | 描画モード | `blendMode` | How a layer composites with what is below it (normal, multiply, screen, and so on). **The Japanese label is 描画モード, never ブレンドモード** |
+| Opacity | 不透明度 | `opacity` | 0-100% in Photoshop's UI. Say so in code when a value is held as 0-1 instead |
+| Fill opacity | 塗りの不透明度 | `fillOpacity` | Opacity of the fill alone, with layer effects excluded. Not the same thing as `opacity` |
+| Clipping mask | クリッピングマスク | `clippingMask` | Clips a layer to the opaque part of the layer below it |
+| Layer mask | レイヤーマスク | `layerMask` | A grayscale mask attached to a layer |
+| Text layer | テキストレイヤー | `textLayer` | A layer carrying text. Photoshop's English UI calls this a *type layer*; the identifier stays `textLayer` |
+| Adjustment layer | 調整レイヤー | `adjustmentLayer` | Changes the tone of the layers below it. Carries no pixel data |
+| Smart object | スマートオブジェクト | `smartObject` | A layer placed while keeping its source data |
+| Artboard | アートボード | `artboard` | Several screen areas held inside one PSD |
+| Pass through | 通過 | `"pass through"` | One of the group blend modes. The group's contents go straight up to the parent and composite with the layers below |
+| Isolated | 分離 | `isolated` | Compositing a group's children into one buffer before compositing that buffer into the parent — what every group other than pass through does. **Photoshop has no such word in either language**; this repository uses it to describe the compositing model |
+| Unsupported | 未対応 | `unsupported` | An element this app cannot reproduce. Shown to the user with this word. **In Japanese it is 未対応** — not 非対応, not サポート外 |
 
-## 描画
+## Rendering
 
-| 日本語 | 識別子 | 説明 |
-| --- | --- | --- |
-| 合成 | `composite` | 複数のレイヤーを重ねて1枚のピクセルデータにすること |
-| 描画 | `render` | 合成した結果をCanvasに書き出すこと。「レンダリング」と書いてもよい |
-| キャンバス | `canvas` | HTMLの`<canvas>`要素。PSD側の用紙サイズを指すときは**「ドキュメントサイズ」**と書いて区別する |
-| ビューポート | `viewport` | 画面上で実際に見えている表示領域 |
-| ズーム倍率 | `zoom` | 表示倍率。1が等倍 |
-| パン | `pan` | 表示位置の平行移動 |
+| Term | 日本語 | Identifier | Description |
+| --- | --- | --- | --- |
+| Composite | 合成 | `composite` | Stacking several layers into one set of pixels |
+| Render | 描画 | `render` | Writing the composited result out to a canvas |
+| Canvas | キャンバス | `canvas` | The HTML `<canvas>` element. For the PSD's own dimensions write **document size**, to keep the two apart |
+| Viewport | ビューポート | `viewport` | The part of the image actually visible on screen |
+| Zoom | ズーム倍率 | `zoom` | Display scale. 1 is actual size |
+| Pan | パン | `pan` | Translation of the displayed position |
 
-## 表記の注意
+## Japanese wording
 
-- 長音を省かない。「レイヤー」「ユーザー」「サーバー」と書く（「レイヤ」「ユーザ」ではない）
-- 英語の識別子をそのまま日本語文中で使うときはバッククォートで囲む（`blendMode`）
-- 同じものを指す語を複数使わない。この表にある語を使う
+Rules for the 日本語 column only. The English half follows [.claude/rules/documentation-style.md](../.claude/rules/documentation-style.md) like everything else.
+
+- Keep the long vowel mark: レイヤー, ユーザー, サーバー — not レイヤ, ユーザ
+- Match Photoshop's Japanese UI label. A term Photoshop does not have (分離) is marked as such in the table

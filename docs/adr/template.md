@@ -3,27 +3,32 @@ status: proposed
 date: YYYY-MM-DD
 ---
 
-# {解決した問題と選んだ手段がわかる短いタイトル}
+# {A short title naming the problem solved and the means chosen}
 
-## 背景と課題
+## Context
 
-{何に困っているのか、なぜ決める必要があるのかを2〜3文で書く。決定の範囲（どのモジュール・どのレイヤーの話か）を明示する。}
+{What the trouble is, and why it has to be decided now, in two or three sentences. State the scope — which module, which layer.}
 
-## 検討した選択肢
+## Decision criteria
 
-- {選択肢1}
-- {選択肢2}
-- {選択肢3}
+1. {What the options get judged on, most important first. How these are weighted is what decides the outcome}
+2. {…}
 
-## 決定
+## Options considered
 
-{選択肢1}を選ぶ。理由は{なぜそれが他より良いのか}。
+- {Option 1}
+- {Option 2}
+- {Option 3}
 
-### 結果
+## Decision
 
-- 良い点: {この決定で改善されること}
-- 悪い点: {この決定で犠牲になること、引き受けるコスト}
+{Option 1} is chosen. The reason is {why it beats the others}.
 
-## 補足
+### Consequences
 
-{参考にした資料へのリンク、いつ見直すべきか、関連するADRなど。書くことがなければ節ごと削る。}
+- Good: {what this decision improves}
+- Bad: {what it gives up, the cost taken on}
+
+## Notes
+
+{Links to what informed the decision, when it should be revisited, related ADRs. Delete the section if there is nothing to put in it.}

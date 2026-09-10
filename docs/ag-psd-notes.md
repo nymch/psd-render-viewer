@@ -1,131 +1,127 @@
 # ag-psd notes
 
-What `ag-psd` actually does, established by running it and by reading its type definitions. **Pinned to the installed version** — a version bump invalidates these notes until they are re-checked.
+What `ag-psd` actually does, as opposed to what its types suggest. **Pinned to ag-psd 31.0.2** (MIT), the installed version — these notes are empirical, so a version bump invalidates them until they are re-checked. Why this parser was chosen is recorded in [ADR-0001](adr/0001-psd-parser.md).
 
-## `ag-psd`の実API
+The findings come from two places. Some were **established by running the library against real PSDs** (layer order, group opacity, initialization outside the browser). The rest were **read out of the type definitions in `node_modules/ag-psd/dist/psd.d.ts` and the bundled implementation** (identifiers, value lists, options). The second kind is correct as to identifiers, but how a real PSD fills them in has not been confirmed.
 
-導入済みの**ag-psd 31.0.2**（MIT）について確認した内容。選定の経緯は[ADR-0001](adr/0001-psd-parser.md)を参照。
+Every property of `Layer` is optional. Treat anything taken off one as possibly `undefined`.
 
-出どころを2つに分ける。**実データで動かして確認した**もの（並び順・グループの不透明度・Node環境の初期化）と、**型定義`node_modules/ag-psd/dist/psd.d.ts`と同梱実装から読み取った**もの（識別子・値の一覧・オプション）。後者は識別子として正しいが、実際のPSDでどう入るかまでは確かめていない。
-
-`Layer`のプロパティはすべて省略可能（`?`付き）。取り出した値は`undefined`前提で扱う。
-
-| 用途 | 識別子 | 注意 |
+| Purpose | Identifier | Notes |
 | --- | --- | --- |
-| 表示状態 | `hidden?: boolean` | **意味が反転している。**アプリ側で`visible`を持つなら`visible: !layer.hidden`と変換する。グループにも付く |
-| 不透明度 | `opacity?: number` | **0〜1**。正規化済みなので変換不要 |
-| 塗りの不透明度 | `fillOpacity?: number` | 0〜1。`opacity`とは別物 |
-| 描画モード | `blendMode?: BlendMode` | 文字列のunion型。値の一覧は後述 |
-| クリッピング | `clipping?: boolean` | |
-| 名前 | `name?: string` | `undefined`がありうる |
-| レイヤーid | `id?: number` | `undefined`がありうるため、そのままReactのkeyには使えない |
-| 子要素 | `children?: Layer[]` | **グループも「childrenを持つレイヤー」として表現される。**専用のGroup型は無い |
-| グループの開閉 | `opened?: boolean` | グループにのみ付く。レイヤーパネルの初期状態に使える |
-| レイヤーの境界 | `left`・`top`・`right`・`bottom` | ドキュメント座標。**`imageData`はこの矩形のサイズで、ドキュメントサイズではない。**描画時にオフセットが要る |
-| ピクセル | `imageData?: PixelData` | `useImageData: true`のときに入る。実体は後述 |
-| レイヤーマスク | `mask?: LayerMaskData` | 後述。`realMask`もある |
-| ベクトルマスク | `vectorMask?: LayerVectorMask` | パス情報のみ。ラスタライズ済みのピクセルは入らない |
-| レイヤー効果 | `effects?: LayerEffectsInfo` | 設定値のみ。**効果を適用した結果は`imageData`に含まれない。**自前で描くしかない |
-| 調整レイヤー | `adjustment?: AdjustmentLayer` | 設定値のみ。ピクセルを持たない |
-| スマートオブジェクト | `placedLayer?: PlacedLayer` | |
-| テキスト | `text?: LayerTextData` | 文字情報。ラスタライズ済みのピクセルは`imageData`の側に入る |
-| アートボード | `artboard?` | レイヤーに付く。`psd.artboards`は件数などの全体情報で別物 |
-| ドキュメントサイズ | `psd.width`・`psd.height` | |
+| Visibility | `hidden?: boolean` | **The sense is inverted.** If the app holds `visible`, convert with `visible: !layer.hidden`. Groups carry it too |
+| Opacity | `opacity?: number` | **0-1**, already normalized, so no conversion is needed |
+| Fill opacity | `fillOpacity?: number` | 0-1. Not the same thing as `opacity` |
+| Blend mode | `blendMode?: BlendMode` | A union of strings. The values are listed below |
+| Clipping | `clipping?: boolean` | |
+| Name | `name?: string` | Can be `undefined` |
+| Layer id | `id?: number` | Can be `undefined`, so it cannot be used as a React key as-is |
+| Children | `children?: Layer[]` | **A group is represented as a layer that has `children`.** There is no separate group type |
+| Group expanded | `opened?: boolean` | Only on groups. Useful for the layer panel's initial state |
+| Layer bounds | `left`, `top`, `right`, `bottom` | Document coordinates. **`imageData` is the size of this rectangle, not of the document.** Drawing needs the offset |
+| Pixels | `imageData?: PixelData` | Present when `useImageData: true`. What it really is, below |
+| Layer mask | `mask?: LayerMaskData` | Below. There is also `realMask` |
+| Vector mask | `vectorMask?: LayerVectorMask` | Path data only. No rasterized pixels |
+| Layer effects | `effects?: LayerEffectsInfo` | Settings only. **The result of applying an effect is not in `imageData`.** Drawing it is on you |
+| Adjustment layer | `adjustment?: AdjustmentLayer` | Settings only. Holds no pixels |
+| Smart object | `placedLayer?: PlacedLayer` | |
+| Text | `text?: LayerTextData` | The text data. Its rasterized pixels are in `imageData` instead |
+| Artboard | `artboard?` | Sits on a layer. `psd.artboards` is document-wide information such as the count, and a different thing |
+| Document size | `psd.width`, `psd.height` | |
 
-### 読み込みオプション
+## Read options
 
 ```typescript
 import {readPsd} from "ag-psd";
 
 const psd = readPsd(arrayBuffer, {
-  useImageData: true,          // canvasではなくPixelDataで受け取る
-  skipCompositeImageData: true, // 合成済み画像を読まない（自前で合成するため不要）
-  skipThumbnail: true,          // サムネイルを読まない
+  useImageData: true,           // receive PixelData rather than a canvas
+  skipCompositeImageData: true, // skip the flattened image, unused since this app composites itself
+  skipThumbnail: true,          // skip the thumbnail
 });
 ```
 
-他に使い道のあるオプション。
+Other options worth knowing about.
 
-| オプション | 既定 | 内容 |
+| Option | Default | What it does |
 | --- | --- | --- |
-| `totalMemoryLimit` | 2GB | デコードに使うメモリの**累積**上限。レイヤーとマスクを1枚デコードするたびにそのバイト数が引かれ、残りが足りなくなると`Error("Exceeded memory limit")`を投げる。1枚あたりの上限ではないので、レイヤー数が多いPSDもここで止まる。**このアプリは`lib/psd/parse.ts`で4GBを明示している**（100MB級のPSDが既定の2GBに当たったため）。`undefined`を明示的に渡すと上限そのものが外れる |
-| `throwForMissingFeatures` | `false` | ag-psd側が対応していない要素に当たったとき例外を投げる |
-| `logMissingFeatures` | `false` | 同じ状況をコンソールに出す |
-| `skipLayerImageData` | `false` | レイヤーのピクセルを読まない。ツリーだけ欲しいときに使う |
-| `skipLinkedFilesData` | `false` | スマートオブジェクトのリンク先を読まない |
+| `totalMemoryLimit` | 2GB | A **cumulative** ceiling on decoding memory. Every layer and mask decoded subtracts its byte count, and once too little is left it throws `Error("Exceeded memory limit")`. It is not a per-image ceiling, so a PSD with many layers stops here too. **This app sets 4GB explicitly in `lib/psd/parse.ts`**, because a 100MB PSD hit the 2GB default. Passing `undefined` removes the ceiling altogether |
+| `throwForMissingFeatures` | `false` | Throw when an element `ag-psd` itself does not support is encountered |
+| `logMissingFeatures` | `false` | Log the same situation to the console |
+| `skipLayerImageData` | `false` | Skip layer pixels. Useful when only the tree is wanted |
+| `skipLinkedFilesData` | `false` | Skip what a smart object links to |
 
-### `imageData`の実体
+## What `imageData` really is
 
-`imageData`の型は`PixelData`（`{data: PixelArray; width: number; height: number}`）で、**DOMの`ImageData`とは別の型**。中身は読み込むPSDのビット深度で変わる。
+The type of `imageData` is `PixelData` (`{data: PixelArray; width: number; height: number}`), which is **a different type from the DOM's `ImageData`**. What it holds depends on the bit depth of the PSD being read.
 
-- **8bit・4チャンネル**（普通のRGBのPSD）では、中身は本物の`ImageData`インスタンス。ag-psdが内部で`canvas.getContext("2d").createImageData()`を呼んで作っているため、そのまま`putImageData`へ渡せる
-- **16bit・32bit**では`{data: Uint16Array | Float32Array, width, height}`のただのオブジェクトになり、`putImageData`は受け付けない
+- At **8 bits with 4 channels** (an ordinary RGB PSD) the contents are a genuine `ImageData` instance. `ag-psd` builds it internally by calling `canvas.getContext("2d").createImageData()`, so it can go straight to `putImageData`
+- At **16 and 32 bits** it is a plain object, `{data: Uint16Array | Float32Array, width, height}`, which `putImageData` rejects
 
-型の上では常に`PixelData`なので、`putImageData`へ渡すには絞り込みが要る。`data instanceof Uint8ClampedArray`で8bitかを判定する。ビット深度は`psd.bitsPerChannel`で読める。
+The type is always `PixelData`, so passing one to `putImageData` needs narrowing. Test `data instanceof Uint8ClampedArray` for the 8-bit case. The bit depth itself is readable at `psd.bitsPerChannel`.
 
-### 描画モードの値
+## Blend mode values
 
-`BlendMode`は次の31個のunion型。
+`BlendMode` is a union of these 31 values.
 
-`"pass through"`・`"normal"`・`"dissolve"`・`"darken"`・`"multiply"`・`"color burn"`・`"linear burn"`・`"darker color"`・`"lighten"`・`"screen"`・`"color dodge"`・`"linear dodge"`・`"lighter color"`・`"overlay"`・`"soft light"`・`"hard light"`・`"vivid light"`・`"linear light"`・`"pin light"`・`"hard mix"`・`"difference"`・`"exclusion"`・`"subtract"`・`"divide"`・`"hue"`・`"saturation"`・`"color"`・`"luminosity"`・`"linear height"`・`"height"`・`"subtraction"`
+`"pass through"`, `"normal"`, `"dissolve"`, `"darken"`, `"multiply"`, `"color burn"`, `"linear burn"`, `"darker color"`, `"lighten"`, `"screen"`, `"color dodge"`, `"linear dodge"`, `"lighter color"`, `"overlay"`, `"soft light"`, `"hard light"`, `"vivid light"`, `"linear light"`, `"pin light"`, `"hard mix"`, `"difference"`, `"exclusion"`, `"subtract"`, `"divide"`, `"hue"`, `"saturation"`, `"color"`, `"luminosity"`, `"linear height"`, `"height"`, `"subtraction"`
 
-**ただし`layer.blendMode`に入りうるのはこのうち28個だけ。**PSDの4文字キーを変換する`toBlendMode`（`dist/helpers.js`）に載っているのが28個で、残る`linear height`・`height`・`subtraction`はディスクリプタ経由（レイヤー効果・ベクトルストローク）でしか出ない。型の31個をそのまま「レイヤーが取りうる値」として数えない。
+**Only 28 of them can appear on `layer.blendMode`.** `toBlendMode` (`dist/helpers.js`), which converts the PSD's four-character keys, covers 28; the remaining `linear height`, `height`, and `subtraction` only ever arrive through a descriptor (a layer effect or a vector stroke). Do not take the type's 31 as the number of values a layer can hold.
 
-対してCanvas 2Dの`globalCompositeOperation`が持つブレンド系の演算は15個（`multiply`・`screen`・`overlay`・`darken`・`lighten`・`color-dodge`・`color-burn`・`hard-light`・`soft-light`・`difference`・`exclusion`・`hue`・`saturation`・`color`・`luminosity`）で、通常合成は`source-over`。
+Canvas 2D's `globalCompositeOperation`, for its part, offers 15 blending operations (`multiply`, `screen`, `overlay`, `darken`, `lighten`, `color-dodge`, `color-burn`, `hard-light`, `soft-light`, `difference`, `exclusion`, `hue`, `saturation`, `color`, `luminosity`), with `source-over` for normal compositing.
 
-28個から`pass through`（グループの構造の話で合成演算ではない）を除いた27個のうち、**名前が対応するのは16個。**加えて`linear dodge`は名前こそ違うが加算合成の`lighter`で写せる（下地が不透明なら一致する）。**残る10個には対応する演算が無い。**どう扱うかは[ADR-0002](adr/0002-blend-mode-mapping.md)で決めている。
+Removing `pass through` from the 28 — it describes group structure, not a compositing operation — leaves 27, of which **16 correspond by name.** On top of those, `linear dodge` maps onto the additive `lighter` despite the different name (the two agree when the backdrop is opaque). **The remaining 10 have no equivalent operation.** [ADR-0002](adr/0002-blend-mode-mapping.md) decides what to do with them.
 
-### レイヤーマスク
+## Layer masks
 
-`mask?: LayerMaskData`のフィールド。
+The fields of `mask?: LayerMaskData`.
 
-| 識別子 | 意味 |
+| Identifier | Meaning |
 | --- | --- |
-| `imageData?: PixelData` | マスクのピクセル。**マスク自身の矩形サイズ**で、レイヤーの矩形とも一致しない。チャンネルの並びは後述 |
-| `left`・`top`・`right`・`bottom` | マスクの矩形。ドキュメント座標 |
-| `disabled?: boolean` | **真のときマスクを適用しない** |
-| `defaultColor?: number` | マスク矩形の外側の値（0または255）。矩形外を透明として扱うか不透明として扱うかがこれで決まる |
-| `positionRelativeToLayer?: boolean` | 矩形がレイヤー相対か |
-| `fromVectorData?: boolean` | ベクトルマスクから作られたマスクか |
-| `userMaskDensity`・`userMaskFeather` | 濃度とぼかし。反映するには自前の計算が要る |
+| `imageData?: PixelData` | The mask's pixels, at **the size of the mask's own rectangle**, which matches neither the layer's rectangle nor the document. Channel layout below |
+| `left`, `top`, `right`, `bottom` | The mask's rectangle, in document coordinates |
+| `disabled?: boolean` | **When true, the mask is not applied** |
+| `defaultColor?: number` | The value outside the mask rectangle, 0 or 255. It decides whether the area outside counts as transparent or opaque |
+| `positionRelativeToLayer?: boolean` | Whether the rectangle is relative to the layer |
+| `fromVectorData?: boolean` | Whether the mask was built from a vector mask |
+| `userMaskDensity`, `userMaskFeather` | Density and feather. Honoring them takes calculation of your own |
 
-`realMask`も同じ`LayerMaskData`型で、ラスターマスクとベクトルマスクの両方があるときに使われる枠。**実データでどう入るかは未確認。**
+`realMask` has the same `LayerMaskData` type and is the slot used when a raster mask and a vector mask are both present. **How real data fills it in has not been confirmed.**
 
-#### マスクのチャンネルの並び
+### Channel layout of a mask
 
-**マスクの濃淡はRGBに入り、アルファは全面255になる。**ag-psdはマスクのチャンネルを読んだあと`setupGrayscale`でRの値をGとBへ複製し、続く`resetAlpha`でアルファを埋めている。
+**A mask's gradations land in RGB, and alpha comes back 255 everywhere.** After reading the mask's channel, `ag-psd` copies the R value into G and B in `setupGrayscale`, then fills alpha in `resetAlpha`.
 
-そのため**`globalCompositeOperation = "destination-in"`へそのまま渡してはいけない。**`destination-in`はソースのアルファを見る演算なので、濃淡が無視されてマスク矩形での矩形切り抜きになる。マスクを効かせるには、Rの値をアルファへ移した`ImageData`を自分で組み立てる。
+Because of that, **a mask must not be handed to `globalCompositeOperation = "destination-in"` as-is.** `destination-in` looks at the source's alpha, so the gradations are ignored and the result is a rectangular cut at the mask's bounds. To make a mask work, build an `ImageData` yourself with the R value moved into alpha.
 
-`defaultColor`はマスク矩形の外側の値（0または255）。`destination-in`は描画範囲の外も含めた宛先全体に効くため、レイヤー全体の大きさで`defaultColor`を敷いてからマスク矩形を書き込む必要がある。
+`defaultColor` is the value outside the mask rectangle, 0 or 255. `destination-in` affects the whole destination including the area outside what was drawn, so lay `defaultColor` down across the full size of the layer before writing the mask rectangle into it.
 
-### レイヤーの並び順
+## Layer order
 
-実データで確認済み。**`children[0]`が最背面で、末尾が最前面。**
+Established against real data. **`children[0]` is the backmost layer and the last element is the frontmost.**
 
-- **Canvasへの描画** — `children`の順のまま（背面から描く）
-- **レイヤーパネルの表示** — 逆順にする（Photoshopと同じく上が最前面）
+- **Drawing to a canvas** — keep the order of `children`, drawing back to front
+- **Displaying the layer panel** — reverse it, so the front is at the top as in Photoshop
 
-`@webtoon/psd`とは逆向きなので、その前提で書かれた記事やコードを流用しない。
+This is the opposite of `@webtoon/psd`, so do not reuse an article or a snippet written on that assumption.
 
-### グループの不透明度
+## Group opacity
 
-**ag-psdは親をさかのぼって掛け合わせた不透明度を提供しない。**グループに`opacity: 0.5`が付いていても、子のレイヤーは`opacity: 1`のまま返る。グループの不透明度を効かせる処理は自分で書く。
+**`ag-psd` does not hand back an opacity accumulated down from the ancestors.** A group with `opacity: 0.5` still returns its child layers at `opacity: 1`. Making group opacity take effect is code you write.
 
-**ただし「ツリーをたどって子へ掛け合わせる」が常に正解ではない。**グループごとにバッファを作って合成する（分離モデル）なら、グループの不透明度はバッファを親へ重ねるときに1回掛ければよい。子へ掛け合わせてしまうと、**子同士が重なった部分だけ濃くなる。**子へ掛け合わせるのが正しいのは、自分のバッファを持たない`"pass through"`のグループだけ。両方でやると二重に掛かる。
+**Multiplying it down the tree into the children is not always the right answer, though.** With a buffer per group (the isolated model), a group's opacity need only be applied once, when its buffer is drawn into the parent. Multiplying it into the children instead makes **the places where children overlap come out darker.** Multiplying into the children is correct only for a `"pass through"` group, which has no buffer of its own. Doing both applies it twice.
 
-グループの`blendMode`は`"pass through"`（Photoshopの「通過」）がありうる。Canvas 2Dの合成演算には対応するものが無いため、別扱いにする。
+A group's `blendMode` can be `"pass through"`. Canvas 2D has no matching compositing operation, so it is handled separately.
 
-### `document`が無い環境での注意
+## Running without a `document`
 
-**`document`が無い環境では`initializeCanvas`でcanvasの実装を渡さないと`readPsd`が例外を投げる**（`"Canvas not initialized"`）。`useImageData: true`を指定していても内部でcanvasを要求する。該当するのはNode（テスト・スクリプト）と**Web Worker**の両方。
+**Where there is no `document`, `readPsd` throws unless `initializeCanvas` is given a canvas implementation** (`"Canvas not initialized"`). It demands a canvas internally even with `useImageData: true`. Both Node (tests and scripts) and **a Web Worker** are affected.
 
-ag-psdは`typeof document !== "undefined"`でブラウザを判定し、そのとき`document.createElement("canvas")`を使う実装を自動で入れる。**Workerには`document`が無いのでこの分岐に入らない。**メインスレッドで動いていたコードをWorkerへ移すと、ここで落ちる。
+`ag-psd` detects the browser with `typeof document !== "undefined"` and, when that holds, installs an implementation backed by `document.createElement("canvas")`. **A worker has no `document`, so it never takes that branch.** Code that worked on the main thread falls over here once moved into a worker.
 
-Workerでは`OffscreenCanvas`を渡せばよい。
+In a worker, pass an `OffscreenCanvas`.
 
 ```typescript
 initializeCanvas((width, height) => new OffscreenCanvas(width, height) as unknown as HTMLCanvasElement);
 ```
 
-`initializeCanvas`は`ag-psd`本体からexportされている。
+`initializeCanvas` is exported from `ag-psd` itself.

@@ -1,53 +1,53 @@
-# {機能名}
+# {Feature name}
 
 <!--
-実装を始める前に書く仕様書。ファイル名は`短い英語のタイトル.md`（kebab-case）。
-書けない節があるなら、それはまだ決まっていないということ。「未解決の論点」に移す。
-埋まらない節は削ってよい。テンプレートを埋めること自体が目的ではない。
+A spec, written before implementation starts. The filename is `a-short-english-title.md` (kebab-case).
+A section that cannot be written is a section not yet decided. Move it to open questions.
+Delete a section that stays empty. Filling in the template is not the point.
 -->
 
-## 概要
+## Overview
 
-{何を作るのかを1〜2文で。この節だけ読んで他人に説明できる粒度にする。}
+{What is being built, in one or two sentences. Written so that this section alone is enough to explain it to someone.}
 
-## 背景
+## Background
 
-{なぜ作るのか。今どう困っているのか。}
+{Why it is being built. What the trouble is today.}
 
-## ゴール
+## Goals
 
-- {この機能が完成したときにできるようになること}
+- {What becomes possible once this is finished}
 
-## やらないこと
+## Out of scope
 
-- {今回の範囲外だと明示しておくこと。後から「これも入ると思っていた」を防ぐ}
+- {What is deliberately not being done, stated so that "I thought this was included" cannot happen later}
 
-## 仕様
+## Specification
 
-### 操作と画面
+### Interaction and screen
 
-{ユーザーが何をすると何が起きるか。画面の要素と操作を書く。図が要るなら簡単なASCIIかmermaidで。}
+{What the user does and what happens. The elements on screen and the actions on them. If a diagram helps, plain ASCII or mermaid.}
 
-### 扱うデータ
+### Data
 
-{入力（PSDのどの情報を読むか）と、アプリが保持する状態。どこに置くか（Jotaiのatom・ref・Server Component）まで書く。}
+{Input — which parts of the PSD get read — and the state the app holds, down to where it lives: a Jotai atom, a ref, or a Server Component.}
 
-### 異常系
+### Failure cases
 
-{読めないファイル、対応していないレイヤー種別、サイズ超過などをどう扱うか。何を表示して何を諦めるか。}
+{Unreadable files, unsupported layer types, size limits. What gets shown, and what gets given up on.}
 
-## 技術設計
+## Technical design
 
-{どう実装するか。触るファイルとデータの流れ。パース・合成・描画のどこで何をするか。Workerに逃がすかどうか。}
+{How it gets implemented. The files touched and the flow of data. What happens during parsing, compositing, and rendering, and whether any of it moves to a worker.}
 
-## 検討した代替案
+## Alternatives considered
 
-{別の作り方を検討したなら、選ばなかった理由とあわせて書く。設計の重い判断はADR（[../adr/](../adr/)）に切り出す。}
+{Other ways of building it, with the reason each was rejected. A heavy design decision gets split out into an ADR ([../adr/](../adr/)).}
 
-## 未解決の論点
+## Open questions
 
-- {決めきれていないこと。実装しながら決めることを明示しておく}
+- {What could not be settled. State what gets decided during implementation}
 
-## 確認方法
+## How to verify
 
-{完成したことをどう確かめるか。試すPSDファイルと、見るべき結果。}
+{How completion gets checked. Which PSD to try, and what to look for in the result.}
