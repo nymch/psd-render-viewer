@@ -11,6 +11,7 @@ Rules for Markdown, code comments, commit messages, and PR bodies. This is a sol
 | The spec for something being built | `docs/design/` | [docs/design/template.md](../../docs/design/template.md) |
 | A technical decision and its reasoning | `docs/adr/` | [docs/adr/template.md](../../docs/adr/template.md) |
 | Terms and their identifiers | [docs/glossary.md](../../docs/glossary.md) | — |
+| Verified `ag-psd` behavior | [docs/ag-psd-notes.md](../../docs/ag-psd-notes.md) | — |
 
 See [docs/README.md](../../docs/README.md) for details. Follow the wording in `docs/glossary.md`, and do not use two words for the same thing.
 

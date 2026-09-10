@@ -31,7 +31,8 @@
 
 ## Documentation updates
 
-- [ ] `docs/glossary.md` — terms or library APIs changed
+- [ ] `docs/glossary.md` — terms or identifiers changed
+- [ ] `docs/ag-psd-notes.md` — verified `ag-psd` behavior changed
 - [ ] `docs/adr/` — made a technical decision worth remembering the reason for
 - [ ] `docs/design/` — the spec changed
 - [ ] `.claude/rules/` — the conventions changed

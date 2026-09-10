@@ -120,7 +120,8 @@ Follow the structure of `.github/pull_request_template.md`.
 
 | Changed path | Item |
 | --- | --- |
-| Library calls in `lib/`, added or changed dependencies | `docs/glossary.md` |
+| A new term, or a renamed identifier | `docs/glossary.md` |
+| Library calls in `lib/`, added or changed dependencies | `docs/ag-psd-notes.md` |
 | A change involving library choice or structure | `docs/adr/` |
 | A change to what a feature does | `docs/design/` |
 | Anything under `.claude/rules/` | `.claude/rules/` |
