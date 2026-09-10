@@ -9,6 +9,11 @@ date: YYYY-MM-DD
 
 {What the trouble is, and why it has to be decided now, in two or three sentences. State the scope — which module, which layer.}
 
+## Decision criteria
+
+1. {What the options get judged on, most important first. How these are weighted is what decides the outcome}
+2. {…}
+
 ## Options considered
 
 - {Option 1}
