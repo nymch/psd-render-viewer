@@ -88,10 +88,16 @@ scope.onmessage = (event: MessageEvent<WorkerRequest>) => {
     composited.width = 0;
     pixels.clear();
 
+    // transferできるのは素のArrayBufferだけ。SharedArrayBuffer由来なら渡せない
+    const buffer = image.data.buffer;
+    if (!(buffer instanceof ArrayBuffer)) {
+      throw new Error("合成結果を転送できる形で取り出せなかった");
+    }
+
     respond({
       status: "ok",
       nodes,
-      pixels: image.data.buffer as ArrayBuffer,
+      pixels: buffer,
       width: psd.width,
       height: psd.height,
     });
