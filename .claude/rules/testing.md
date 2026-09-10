@@ -59,6 +59,8 @@ Browsers need no such initialization, so treat the stub as test-only.
 
 ## E2E (Playwright)
 
+**Not set up yet.** Playwright is not installed, there is no `e2e/` directory, and `package.json` has no `test:e2e` script. What follows is how it works once it is, not what can be run today. The spec's out-of-scope list keeps E2E outside the first version.
+
 - Files go in `e2e/` as `*.spec.ts`
 - **Exclude `e2e/` in `vitest.config.mts` so Vitest does not pick it up.** Vitest matches `.spec.ts` by default, and without the exclusion it runs the Playwright tests and fails
 - Cover canvas rendering and opening a file. **Do not write an E2E test for something a unit test can verify** — E2E is slow and brittle
@@ -67,8 +69,9 @@ Browsers need no such initialization, so treat the stub as test-only.
 ## Running
 
 ```bash
-npm test          # Vitest
-npm run test:e2e  # Playwright
+npm test  # Vitest
 ```
 
 `npm test` must pass before opening a PR. See [create-pr](../skills/create-pr/SKILL.md) for the procedure.
+
+There is no E2E command yet — see the section above.

@@ -97,7 +97,7 @@ If any of them fails, do not open the PR. Report what failed and stop. Never ope
 
 Run `npm test` only when `package.json` has a `test` script. If there is none, skip it and leave that checkbox unchecked.
 
-E2E is slow, so it does not run by default. Run `npm run test:e2e` as well only when the change touches canvas rendering or opening a file.
+E2E is slow, so it does not run by default, and **`package.json` has no `test:e2e` script today** — Playwright is not set up. Check before running it. Once the script exists, run it when the change touches canvas rendering or opening a file; until then there is nothing to run and the E2E line stays out of the verification section.
 
 Run both even when the diff is docs or config with no application code, to confirm nothing broke.
 
