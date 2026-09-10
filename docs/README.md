@@ -27,6 +27,7 @@
 - [ADR-0001 PSDパーサにag-psdを使う](adr/0001-psd-parser.md)
 - [ADR-0002 描画モードはCanvas 2Dへ写せる17個だけ対応し、残りはnormalへ倒す](adr/0002-blend-mode-mapping.md)
 - [ADR-0003 レイヤーの展開を1枚ずつに遅らせ、メモリの上限は同時に生きる量で見積もる](adr/0003-deferred-layer-decoding.md)（**保留中**）
+- [ADR-0004 パースと合成をWeb Workerへ逃がし、Workerは読み込みごとに使い捨てる](adr/0004-worker-offloading.md)
 
 ## 書かないもの
 
