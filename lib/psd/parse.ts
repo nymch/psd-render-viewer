@@ -15,8 +15,8 @@ const TOTAL_MEMORY_LIMIT = 4 * 1024 * 1024 * 1024;
  * Wraps `readPsd`, fixing the options.
  *
  * `useImageData: true` receives PixelData rather than a canvas, and the flattened image and the
- * thumbnail are skipped because compositing happens here. It is synchronous, so a frame has to
- * be yielded before calling it (see `hooks/psdHooks.ts`).
+ * thumbnail are skipped because compositing happens here. It is synchronous, which is why it
+ * runs inside `lib/psd/worker.ts` rather than on the main thread (ADR-0004).
  */
 export function parsePsd(buffer: ArrayBuffer): Psd {
   return readPsd(buffer, {

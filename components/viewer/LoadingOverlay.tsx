@@ -9,7 +9,10 @@ import {loadAttemptAtom} from "@/atoms/document";
  * Placed as a sibling of the canvas it would sit alongside, putting the text right next to the
  * previous render and shifting the layout. Laid over the non-scrolling region instead, it stays
  * put and the previous render shows through.
- * Parsing runs synchronously and freezes the whole screen, so covering the panel too is fine.
+ *
+ * It covers the layer panel as well, which dates from parsing running on the main thread and
+ * freezing the whole screen. Parsing moved into a worker in ADR-0004, so the panel is now
+ * responsive underneath and the overlay is what blocks it.
  */
 export function LoadingOverlay() {
   const attempt = useAtomValue(loadAttemptAtom);
