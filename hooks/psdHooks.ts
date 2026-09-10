@@ -5,40 +5,16 @@ import {useEffect, useRef} from "react";
 import type {RefObject} from "react";
 import {documentAtom, loadAttemptAtom} from "@/atoms/document";
 import {layerTreeAtom} from "@/atoms/layers";
-import {compositeDocument} from "@/lib/psd/composite";
-import {
-  checkBitsPerChannel,
-  checkDocumentSize,
-  describeRejection,
-} from "@/lib/psd/limits";
-import {parsePsd} from "@/lib/psd/parse";
-import {buildLayerTree} from "@/lib/psd/tree";
-
-/**
- * `readPsd`は同期関数なので、状態を`parsing`にした直後に呼ぶとローディング表示が一度も塗られない。
- * 1回目のコールバックはそのフレームの描画前に走るため、実際に塗られたことを保証するには
- * 2回目まで待つ必要がある。
- */
-function nextPaintedFrame(): Promise<void> {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-  });
-}
-
-function toMessage(error: unknown): string {
-  if (!(error instanceof Error)) return String(error);
-  // ag-psdはメモリ予算を使い切るとこのメッセージで投げる。そのままでは何が起きたか伝わらない
-  if (error.message === "Exceeded memory limit") {
-    return "PSDが大きすぎて読み込めない";
-  }
-  return error.message;
-}
+import type {WorkerRequest, WorkerResponse} from "@/lib/psd/workerMessage";
 
 /**
  * ファイルを開いてからCanvasへ描くまでを担う。
  *
- * パースする側と描く側を同じコンポーネントに寄せている。refはコンポーネント単位なので、
- * 別のコンポーネントでパースするとピクセルの受け渡し先が無くなる。
+ * パースと合成はWorkerで行う。`readPsd`は同期関数なので、メインスレッドで呼ぶと
+ * パースの間ずっとUIが止まる。判断の経緯はADR-0004を参照。
+ *
+ * Workerは読み込みごとに生成し、完了・失敗・差し替えでterminateする。展開済みピクセルが
+ * Workerごと消えるため、解放漏れが構造的に起きない。
  */
 export function usePsdDocument(
   canvasRef: RefObject<HTMLCanvasElement | null>,
@@ -50,97 +26,90 @@ export function usePsdDocument(
 
   // 表示中のドキュメント。描画のきっかけにする
   const loaded = useAtomValue(documentAtom);
-  const bitmapRef = useRef<ImageBitmap | null>(null);
+  // 合成結果のRGBA。巨大なのでstateには入れない
+  const imageRef = useRef<ImageData | null>(null);
 
   useEffect(() => {
     if (attempt.status !== "parsing") return;
 
     const file = attempt.file;
-    let cancelled = false;
+    const worker = new Worker(
+      new URL("../lib/psd/worker.ts", import.meta.url),
+      {type: "module"},
+    );
 
-    const load = async () => {
-      await nextPaintedFrame();
-      if (cancelled) return;
-
-      let buffer: ArrayBuffer;
-      try {
-        buffer = await file.arrayBuffer();
-      } catch (error) {
-        if (!cancelled) {
-          setAttempt({status: "error", fileName: file.name, message: toMessage(error)});
-        }
+    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+      const result = event.data;
+      if (result.status === "error") {
+        setAttempt({status: "error", fileName: file.name, message: result.message});
+        worker.terminate();
         return;
       }
-      if (cancelled) return;
 
-      try {
-        const psd = parsePsd(buffer);
+      // 前のファイルの資源を先に解放する
+      imageRef.current = new ImageData(
+        new Uint8ClampedArray(result.pixels),
+        result.width,
+        result.height,
+      );
 
-        const depth = checkBitsPerChannel(psd.bitsPerChannel);
-        if (!depth.ok) throw new Error(describeRejection(depth));
-
-        const size = checkDocumentSize(psd.width, psd.height);
-        if (!size.ok) throw new Error(describeRejection(size));
-
-        const {nodes, pixels} = buildLayerTree(psd);
-        const composited = compositeDocument({
-          nodes,
-          pixels,
-          width: psd.width,
-          height: psd.height,
-        });
-
-        if (cancelled) {
-          composited.width = 0;
-          return;
-        }
-
-        // 前のファイルの資源を先に解放する
-        bitmapRef.current?.close();
-        bitmapRef.current = composited.transferToImageBitmap();
-        // transferToImageBitmapは同じ大きさの空のバッキングストアを残す
-        composited.width = 0;
-
-        // ピクセルはここで捨てる。このバージョンは再合成しないので、持っていても使い道が無い。
-        // 抱えたままにすると、次のファイルを読む間ずっと2ドキュメント分がメモリに載る。
-        pixels.clear();
-
-        setLayerTree(nodes);
-        setDocument({fileName: file.name, width: psd.width, height: psd.height});
-        setAttempt({status: "idle"});
-      } catch (error) {
-        if (!cancelled) {
-          setAttempt({status: "error", fileName: file.name, message: toMessage(error)});
-        }
-      }
+      setLayerTree(result.nodes);
+      setDocument({
+        fileName: file.name,
+        width: result.width,
+        height: result.height,
+      });
+      setAttempt({status: "idle"});
+      worker.terminate();
     };
 
-    void load();
-    return () => {
-      cancelled = true;
+    worker.onerror = (event) => {
+      setAttempt({
+        status: "error",
+        fileName: file.name,
+        message: event.message || "Workerでエラーが起きた",
+      });
+      worker.terminate();
     };
+
+    const send = async () => {
+      const buffer = await file.arrayBuffer();
+      const request: WorkerRequest = {buffer};
+      // ArrayBufferはtransferableなので所有権ごと渡す
+      worker.postMessage(request, [buffer]);
+    };
+
+    void send().catch((error: unknown) => {
+      setAttempt({
+        status: "error",
+        fileName: file.name,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      worker.terminate();
+    });
+
+    // 読み込み中に別のファイルが来たら、走っているWorkerごと捨てる
+    return () => worker.terminate();
   }, [attempt, setAttempt, setDocument, setLayerTree]);
 
   // 合成結果をCanvasへ移す。Canvasの寸法が変わると中身が消えるため、描画はここにまとめる。
-  // 依存を付けないと再レンダーのたびにドキュメント大のdrawImageが走るので、
+  // 依存を付けないと再レンダーのたびにドキュメント大の書き込みが走るので、
   // 表示中のドキュメントが変わったときだけにする。
   useEffect(() => {
     const canvas = canvasRef.current;
-    const bitmap = bitmapRef.current;
-    if (canvas === null || bitmap === null) return;
-    if (canvas.width !== bitmap.width) canvas.width = bitmap.width;
-    if (canvas.height !== bitmap.height) canvas.height = bitmap.height;
+    const image = imageRef.current;
+    if (canvas === null || image === null) return;
+    if (canvas.width !== image.width) canvas.width = image.width;
+    if (canvas.height !== image.height) canvas.height = image.height;
 
     const ctx = canvas.getContext("2d");
     if (ctx === null) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(bitmap, 0, 0);
+    ctx.putImageData(image, 0, 0);
   }, [loaded, canvasRef]);
 
   useEffect(() => {
     return () => {
-      bitmapRef.current?.close();
-      bitmapRef.current = null;
+      imageRef.current = null;
     };
   }, []);
 }

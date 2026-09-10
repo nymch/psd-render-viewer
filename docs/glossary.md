@@ -140,11 +140,19 @@ const psd = readPsd(arrayBuffer, {
 
 グループの`blendMode`は`"pass through"`（Photoshopの「通過」）がありうる。Canvas 2Dの合成演算には対応するものが無いため、別扱いにする。
 
-### Node環境での注意
+### `document`が無い環境での注意
 
-ブラウザでは何もしなくてよいが、**Node（テスト・スクリプト）では`initializeCanvas`でcanvasの実装を渡さないと`readPsd`が例外を投げる**。`useImageData: true`を指定していても内部でcanvasを要求する。
+**`document`が無い環境では`initializeCanvas`でcanvasの実装を渡さないと`readPsd`が例外を投げる**（`"Canvas not initialized"`）。`useImageData: true`を指定していても内部でcanvasを要求する。該当するのはNode（テスト・スクリプト）と**Web Worker**の両方。
 
-ag-psdは`typeof document !== "undefined"`でブラウザを判定し、そのとき`document.createElement("canvas")`を使う実装を自動で入れる。Nodeではこの分岐に入らないため`"Canvas not initialized"`で落ちる。`initializeCanvas`は`ag-psd`本体からexportされている。
+ag-psdは`typeof document !== "undefined"`でブラウザを判定し、そのとき`document.createElement("canvas")`を使う実装を自動で入れる。**Workerには`document`が無いのでこの分岐に入らない。**メインスレッドで動いていたコードをWorkerへ移すと、ここで落ちる。
+
+Workerでは`OffscreenCanvas`を渡せばよい。
+
+```typescript
+initializeCanvas((width, height) => new OffscreenCanvas(width, height) as unknown as HTMLCanvasElement);
+```
+
+`initializeCanvas`は`ag-psd`本体からexportされている。
 
 ## 描画
 

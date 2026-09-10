@@ -22,8 +22,3 @@ export type LoadAttempt =
 export const documentAtom = atom<LoadedDocument | null>(null);
 
 export const loadAttemptAtom = atom<LoadAttempt>({status: "idle"});
-
-/** 読み込み中はファイルの受け付けを止める。同期パースの前後にawaitがあり、二重に走りうる */
-export const isLoadingAtom = atom(
-  (get) => get(loadAttemptAtom).status === "parsing",
-);
