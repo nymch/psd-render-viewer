@@ -1,35 +1,37 @@
 ---
 name: create-pr
-description: ブランチの差分とコミット履歴を分析し、PRテンプレートに沿った本文を生成してPRを作成する。「PRを作って」「プルリクを出して」といった依頼で使う
+description: Analyze the branch diff and commit history, fill in the PR template, and open the pull request. Use for requests like "open a PR", or Japanese phrasings such as 「PRを作って」「プルリクを出して」.
 user-invocable: true
 allowed-tools: Bash(git *), Bash(gh pr *), Bash(gh auth status), Bash(gh repo view *), Bash(npm run *), AskUserQuestion, Read, Grep
 ---
 
 # create-pr
 
-ブランチの差分を分析し、[.github/pull_request_template.md](../../../.github/pull_request_template.md)に沿った本文でPRを作成する。
+Analyze the branch diff and open a PR whose body follows [.github/pull_request_template.md](../../../.github/pull_request_template.md).
 
-一人開発ではPRの本文が唯一のレビュー記録になる。**差分を読めばわかることではなく、差分からは読み取れない判断を書く。**
+On a solo project the PR body is the only review record. **Write down the judgment calls the diff cannot show, not what the diff already says.**
 
-## ブランチ運用（簡易版git-flow）
+Conduct the conversation in the user's language — if they write in Japanese, reply in Japanese. **The PR title and body are always English**, per [ADR-0005](../../../docs/adr/0005-repository-language.md).
 
-| ブランチ | ベース | 用途 |
+## Branching (simplified git-flow)
+
+| Branch | Base | Purpose |
 | --- | --- | --- |
-| `main` | — | リリース済みの状態 |
-| `develop` | — | 統合ブランチ。GitHubのデフォルト |
-| `feature/*` | `develop` | 機能追加 |
-| `fix/*` | `develop` | バグ修正 |
-| `refactor/*`・`docs/*`・`chore/*` | `develop` | その他の変更 |
-| `hotfix/*` | `main` | リリース済みの緊急修正。**マージ後は`develop`にも取り込む** |
-| `release`（`develop` → `main`） | `main` | リリース |
+| `main` | — | Released state |
+| `develop` | — | Integration branch, and the GitHub default |
+| `feature/*` | `develop` | New features |
+| `fix/*` | `develop` | Bug fixes |
+| `refactor/*`, `docs/*`, `chore/*` | `develop` | Everything else |
+| `hotfix/*` | `main` | Urgent fix to a release. **Merge back into `develop` afterwards** |
+| Release (`develop` → `main`) | `main` | A release |
 
-`release/*`ブランチは使わない。
+There are no `release/*` branches.
 
-## 手順
+## Procedure
 
-### 1. 前提確認
+### 1. Check the prerequisites
 
-並列で実行する:
+Run in parallel:
 
 ```bash
 gh auth status
@@ -38,29 +40,29 @@ git status --short
 git remote -v
 ```
 
-- **未認証** — その旨を伝えて終了する
-- **`main`か`develop`の上にいる** — 作業ブランチに切り替えるよう伝えて終了する。ただし`develop`にいて「リリースPR」を作る意図が明確な場合は、`develop` → `main`のPRとして続行する
-- **未コミットの変更がある** — `AskUserQuestion`で、コミット済み分だけでPRを作るか、先にコミットするかを確認する
+- **Not authenticated** — say so and stop
+- **On `main` or `develop`** — ask the user to switch to a working branch and stop. The exception is being on `develop` with a clear intent to open a release PR, in which case continue as `develop` → `main`
+- **Uncommitted changes** — use `AskUserQuestion` to ask whether to open the PR with what is committed, or commit first
 
-### 2. ベースブランチの確定
+### 2. Determine the base branch
 
-**ブランチ名の接頭辞から決める。デフォルトブランチを無条件に使わない。**
+**Derive it from the branch name prefix. Do not default to the repository's default branch.**
 
 - `hotfix/*` → `main`
-- `develop`（リリースPR） → `main`
-- それ以外 → `develop`
+- `develop` (release PR) → `main`
+- Anything else → `develop`
 
-確定したら最新化する:
+Then bring it up to date:
 
 ```bash
 git fetch origin <base>
 ```
 
-以降の比較はすべて`origin/<base>`を使う。ローカルが古いと、マージ済みの変更が差分に混ざる。
+Compare against `origin/<base>` from here on. A stale local base pulls already-merged changes into the diff.
 
-### 3. 情報の収集
+### 3. Gather information
 
-並列で実行する:
+Run in parallel:
 
 ```bash
 git log origin/<base>..HEAD --oneline
@@ -69,21 +71,21 @@ git diff origin/<base>...HEAD
 git ls-remote --heads origin <branch>
 ```
 
-コミットが0件なら「ベースブランチとの差分がありません」と伝えて終了する。
+If there are no commits, say there is no difference from the base branch and stop.
 
-### 4. 自己レビュー
+### 4. Self-review
 
-**PRを出す前に、差分を自分で読む。**レビュアーがいないため、ここを飛ばすと誰も見ないままマージされる。
+**Read the diff yourself before opening the PR.** There is no reviewer, so skipping this means nobody ever looks at it.
 
-- `.claude/rules/`の規約に反している箇所がないか確認する
-- デバッグ用のコード・コメントアウトした残骸・`console.log`が残っていないか確認する
-- 差分に無関係な変更が混ざっていないか確認する。混ざっていればPRの分割を提案する
+- Check for anything that violates the conventions in `.claude/rules/`
+- Check for leftover debug code, commented-out remnants, and `console.log`
+- Check for unrelated changes mixed into the diff. If there are, propose splitting the PR
 
-残骸をgrepで探すときは、**ドキュメントやスキル自身の説明文を拾う偽陽性**に注意する。`console.log`を検索すると、それを禁止している文章そのものがヒットする。ヒットした行が実際のコードかを確認してから報告する。
+When grepping for leftovers, watch for **false positives from documentation and from the skills' own prose**. Searching for `console.log` matches the very sentence that forbids it. Confirm a hit is real code before reporting it.
 
-### 4.1. 動作確認
+### 4.1. Verification
 
-テンプレートの「動作確認」欄を埋めるために実行する:
+Run these to fill in the template's verification section:
 
 ```bash
 npm run lint
@@ -91,77 +93,77 @@ npm run build
 npm test
 ```
 
-いずれかが失敗したらPRを作らず、その内容を伝えて終了する。壊れた状態のPRを出さない。
+If any of them fails, do not open the PR. Report what failed and stop. Never open a PR on a broken state.
 
-`npm test`は`package.json`に`test`スクリプトがある場合だけ実行する。無ければ飛ばし、PR本文の該当欄はチェックしない。
+Run `npm test` only when `package.json` has a `test` script. If there is none, skip it and leave that checkbox unchecked.
 
-E2Eは重いため既定では走らせない。Canvasの描画やファイルを開く操作に触れる変更のときだけ`npm run test:e2e`も実行する。
+E2E is slow, so it does not run by default. Run `npm run test:e2e` as well only when the change touches canvas rendering or opening a file.
 
-差分がドキュメントや設定のみでアプリのコードを含まない場合も、両方を実行して壊れていないことを確認する。
+Run both even when the diff is docs or config with no application code, to confirm nothing broke.
 
-**実行していない確認をチェック済みにしない。**「実際に動かして確認した」は、ブラウザやCLIで挙動を見たときだけチェックする。
+**Never check a box for something that was not actually done.** Check "verified by running it" only after observing the behavior in a browser or CLI.
 
-見つかった問題は、PRを作る前にユーザーへ伝える。
+Report anything found to the user before opening the PR.
 
-### 5. 本文の生成
+### 5. Write the body
 
-`.github/pull_request_template.md`の構成に沿って埋める。
+Follow the structure of `.github/pull_request_template.md`.
 
-- **概要** — 変更を1〜3行で要約する
-- **種別** — ブランチ名の接頭辞から該当するものに`[x]`を入れる（`feature`→機能追加、`fix`・`hotfix`→バグ修正、`refactor`・`chore`・`perf`→改善、`docs`→ドキュメント）
-- **背景・目的** — なぜこの変更が要るか。関連する`docs/design/`や`docs/adr/`があればリンクする
-- **アプローチ** — **どういう方針で解決したか。検討した代替案と選ばなかった理由を書く。**「何を変えたか」は変更内容に書くので、ここには書かない
-- **変更内容** — 差分から主要な変更点を箇条書きにする。ファイル名はバッククォートで囲む
-- **動作確認** — 実際に確認した項目だけ`[x]`にする。**確認していない項目にチェックを入れない**
-- **ドキュメント更新** — 変更パスから推定する（下表）。該当がなければ「上記いずれにも該当しない」にチェック
-- **補足** — 未解決の論点・後回しにしたこと・レビューで特に見てほしい点。無ければ空のまま
+- **Summary** — one to three lines
+- **Type** — check the box implied by the branch prefix (`feature` → feature, `fix`/`hotfix` → bug fix, `refactor`/`chore`/`perf` → improvement, `docs` → documentation)
+- **Background** — why the change is needed. Link the relevant `docs/design/` or `docs/adr/` if there is one
+- **Approach** — **how it was solved, which alternatives were considered, and why they were rejected.** What changed belongs under Changes, not here
+- **Changes** — the main points from the diff, as a list. File names in backticks
+- **Verification** — check only what was actually verified. **Never check something that was not**
+- **Documentation updates** — infer from the paths that changed, per the table below. If none apply, check "none of the above"
+- **Notes** — open questions, things deferred, anything worth a closer look. Leave empty if there is nothing
 
-| 変更パス | 該当する項目 |
+| Changed path | Item |
 | --- | --- |
-| `lib/`のライブラリ呼び出し、依存の追加・変更 | `docs/glossary.md` |
-| ライブラリ選定・構造の決定を伴う変更 | `docs/adr/` |
-| 機能の仕様が変わる変更 | `docs/design/` |
-| `.claude/rules/`配下 | `.claude/rules/` |
+| Library calls in `lib/`, added or changed dependencies | `docs/glossary.md` |
+| A change involving library choice or structure | `docs/adr/` |
+| A change to what a feature does | `docs/design/` |
+| Anything under `.claude/rules/` | `.claude/rules/` |
 
-### 6. タイトルの生成
+### 6. Write the title
 
 ```text
-type(scope): 日本語の説明
+type(scope): description
 ```
 
-`type`と`scope`の決め方は[commit](../commit/SKILL.md)スキルと同じ。作業内容ではなく効果を書く。
+`type` and `scope` are chosen the same way as in the [commit](../commit/SKILL.md) skill. Say what changed, not what you did.
 
-### 7. 文体の適用
+### 7. Apply the style rules
 
-[.claude/rules/documentation-style.md](../../rules/documentation-style.md)に従う。特に:
+Follow [.claude/rules/documentation-style.md](../../rules/documentation-style.md), in particular:
 
-- 英数字と日本語の間にスペースを入れない
-- ファイル名・コマンド・型名はバッククォートで囲む
-- LLM調の空虚な定型表現を使わない
+- Backticks around file names, commands, and type names
+- No hollow phrasing
+- Name what a demonstrative refers to
 
-### 8. 提示と確認
+### 8. Present and confirm
 
-生成したタイトルと本文の全体を提示し、`AskUserQuestion`で作成・修正・キャンセルを選ばせる。修正を選ばれたら指示を反映して再提示する。
+Show the full title and body, then use `AskUserQuestion` to offer create / revise / cancel. If revise is chosen, apply the instructions and present again.
 
-### 9. pushとPR作成
+### 9. Push and create
 
-リモートにブランチが無ければ、pushの確認を取ってから実行する:
+If the branch is not on the remote, confirm before pushing:
 
 ```bash
 git push -u origin <branch>
 ```
 
-本文は**スクラッチパッド配下の一時ファイルに書き出してから渡す**。バッククォートや`#`をヒアドキュメントで直接埋め込むとシェルのエスケープ事故が起きる。
+**Write the body to a temporary file under the scratchpad directory and pass that.** Embedding backticks and `#` directly in a heredoc causes shell escaping accidents.
 
 ```bash
-gh pr create --base <base> --title "<タイトル>" --body-file <一時ファイル>
+gh pr create --base <base> --title "<title>" --body-file <temp file>
 ```
 
-### 10. 結果報告
+### 10. Report
 
-PRのURLを提示する。あわせて次を伝える:
+Give the PR URL, and say:
 
-- ベースブランチが何になったか（`hotfix`とリリースPRは`main`向き）
-- `hotfix/*`の場合は、`main`へのマージ後に`develop`へも取り込む必要があること
+- Which base branch it targets (`hotfix` and release PRs go to `main`)
+- For `hotfix/*`, that it also needs merging into `develop` after it lands in `main`
 
-**マージはこのスキルでは行わない。**
+**This skill does not merge.**
