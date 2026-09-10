@@ -1,25 +1,25 @@
-# ADR（Architecture Decision Record）
+# ADR (Architecture Decision Record)
 
-技術的な決定と、その理由を残す場所。[template.md](template.md)を使う。
+Where a technical decision and its reasoning are kept. Use [template.md](template.md).
 
-テンプレートは[MADR 4.0.0](https://adr.github.io/madr/)のminimal版をもとにした日本語版。MADRはMITとCC0-1.0のデュアルライセンスで、CC0を選べば表示義務なく利用・改変できる。
+The template is based on the minimal variant of [MADR 4.0.0](https://adr.github.io/madr/). MADR is dual-licensed under MIT and CC0-1.0; taking CC0 allows use and modification without an attribution requirement.
 
-## いつ書くか
+## When to write one
 
-後から自分が「なぜこうなっているのか」を思い出したくなりそうな判断をしたとき。目安:
+When a judgment call is made that you will later want to remember the reason for. Roughly:
 
-- ライブラリや方式の選定（PSDパーサ、状態管理、描画方式）
-- 後から変えるのが高くつく構造の決定（Worker分離、データの持ち方）
-- 一見遠回りに見える実装を選んだとき
+- Choosing a library or an approach (the PSD parser, state management, how rendering works)
+- Deciding a structure that is expensive to change afterwards (splitting work into a worker, how data is held)
+- Picking an implementation that looks like the long way round
 
-逆に、書かなくてよいもの:
+What does not need one:
 
-- コードを読めばわかる実装の詳細
-- いつでも戻せる小さな選択
+- Implementation detail that can be read off the code
+- A small choice that can be undone at any time
 
-## 書き方
+## How to write one
 
-- ファイル名は`0001-短い英語のタイトル.md`（連番 + kebab-case）。連番は既存の最大値 + 1
-- 1ファイルに1つの決定。複数の判断が混ざるなら分ける
-- `status`は`proposed`（検討中）→`accepted`（採用）と進む。後で覆したら`superseded by ADR-0007`のように書き、**元のADRは消さない**。覆した事実そのものが記録として意味を持つ
-- **選ばなかった選択肢とその理由を必ず書く**。ADRの価値の大半はここにある。結論だけならコードを見ればわかる
+- The filename is `0001-a-short-english-title.md` — a serial number plus kebab-case. The number is the highest existing one plus 1
+- One decision per file. Split them if several judgment calls are mixed together
+- `status` goes `proposed` → `accepted`. If a decision is later overturned, write `superseded by ADR-0007` and **do not delete the original**. That it was overturned is itself part of the record
+- **Always write down the options that were not chosen, and why.** Most of an ADR's value is there. The conclusion on its own can be read off the code
