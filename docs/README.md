@@ -28,6 +28,8 @@
 - [ADR-0002 描画モードはCanvas 2Dへ写せる17個だけ対応し、残りはnormalへ倒す](adr/0002-blend-mode-mapping.md)
 - [ADR-0003 レイヤーの展開を1枚ずつに遅らせ、メモリの上限は同時に生きる量で見積もる](adr/0003-deferred-layer-decoding.md)（**保留中**）
 - [ADR-0004 パースと合成をWeb Workerへ逃がし、Workerは読み込みごとに使い捨てる](adr/0004-worker-offloading.md)
+- [ADR-0005 Write everything committed to the repository in English, and localize the UI separately](adr/0005-repository-language.md)
+- [ADR-0006 Split the verified `ag-psd` behavior out of the glossary into its own document](adr/0006-split-glossary.md)
 
 ## 書かないもの
 
