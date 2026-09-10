@@ -1,5 +1,6 @@
 name: Task
 description: Something to do later that should not be lost
+labels: ["task"]
 body:
   - type: markdown
     attributes:
