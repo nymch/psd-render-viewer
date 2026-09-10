@@ -1,12 +1,12 @@
 import {initializeCanvas} from "ag-psd";
 
 /**
- * Nodeでは`initializeCanvas`でcanvasの実装を渡さないと`readPsd`が例外を投げる。
- * `useImageData: true`を指定していても内部でcanvasを要求する。ブラウザでは
- * ag-psdが`document`を見て自動で用意するため、この初期化はテスト専用。
+ * Under Node, `readPsd` throws unless `initializeCanvas` is given a canvas implementation. It
+ * demands a canvas internally even with `useImageData: true`. In a browser ag-psd sets one up
+ * automatically off `document`, so this initialization is test-only.
  *
- * 実際に描画するテストは書かない（Canvasの正しさは目視比較で確かめる）ので、
- * `createImageData`だけが動けばよい最小のスタブを渡す。
+ * No test draws anything - the canvas is verified by side-by-side comparison instead - so the
+ * stub is the minimum that makes `createImageData` work.
  */
 initializeCanvas(
   (width: number, height: number) => {

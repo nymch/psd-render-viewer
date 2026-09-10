@@ -2,7 +2,7 @@ import {describe, expect, it} from "vitest";
 import {buildMaskAlpha} from "@/lib/psd/mask";
 import type {Bounds, MaskRef, PixelSource} from "@/lib/psd/tree";
 
-/** ag-psdはマスクの濃淡をRGBへ複製し、アルファは全面255で返す。その形を再現する */
+/** ag-psd copies a mask's gradations into RGB and returns alpha at 255 everywhere. Reproduced here */
 function maskPixels(values: number[], width: number, height: number): PixelSource {
   const data = new Uint8ClampedArray(width * height * 4);
   values.forEach((value, index) => {
@@ -34,7 +34,7 @@ function mask(overrides: Partial<MaskRef> = {}): MaskRef {
 }
 
 describe("buildMaskAlpha", () => {
-  it("マスクのRチャンネルの値がアルファへ移る", () => {
+  it("moves the mask's R channel into alpha", () => {
     const result = buildMaskAlpha(
       mask(),
       maskPixels([0, 64, 128, 255], 2, 2),
@@ -46,8 +46,8 @@ describe("buildMaskAlpha", () => {
     expect(alphaAt(result, 1, 1)).toBe(255);
   });
 
-  it("マスク矩形が対象より小さいとき、外側がdefaultColorで埋まる", () => {
-    // defaultColorが255（矩形外は表示）なので、埋めないと矩形外が消える
+  it("fills outside a mask rectangle smaller than the target with defaultColor", () => {
+    // defaultColor is 255 (outside is visible), so without the fill the outside disappears
     const result = buildMaskAlpha(
       mask({bounds: {left: 0, top: 0, right: 1, bottom: 1}, defaultColor: 255}),
       maskPixels([0], 1, 1),
@@ -59,7 +59,7 @@ describe("buildMaskAlpha", () => {
     expect(alphaAt(result, 1, 1)).toBe(255);
   });
 
-  it("defaultColorが0のときは矩形の外が透明になる", () => {
+  it("leaves outside the rectangle transparent when defaultColor is 0", () => {
     const result = buildMaskAlpha(
       mask({bounds: {left: 0, top: 0, right: 1, bottom: 1}, defaultColor: 0}),
       maskPixels([255], 1, 1),
@@ -69,7 +69,7 @@ describe("buildMaskAlpha", () => {
     expect(alphaAt(result, 1, 1)).toBe(0);
   });
 
-  it("マスク矩形がずれていても対象の座標へ合わせて書き込む", () => {
+  it("writes an offset mask rectangle at the target's coordinates", () => {
     const result = buildMaskAlpha(
       mask({bounds: {left: 1, top: 1, right: 2, bottom: 2}}),
       maskPixels([200], 1, 1),
@@ -79,7 +79,7 @@ describe("buildMaskAlpha", () => {
     expect(alphaAt(result, 1, 1)).toBe(200);
   });
 
-  it("対象の外へはみ出したマスクは切り落とされる", () => {
+  it("clips a mask that overflows the target", () => {
     const result = buildMaskAlpha(
       mask({bounds: {left: 1, top: 1, right: 4, bottom: 4}}),
       maskPixels([10, 20, 30, 40, 50, 60, 70, 80, 90], 3, 3),
@@ -90,7 +90,7 @@ describe("buildMaskAlpha", () => {
     expect(alphaAt(result, 1, 1)).toBe(10);
   });
 
-  it("結果は対象の矩形と同じ大きさになる", () => {
+  it("sizes the result to the target rectangle", () => {
     const result = buildMaskAlpha(mask(), maskPixels([0, 0, 0, 0], 2, 2), {
       left: 5,
       top: 5,

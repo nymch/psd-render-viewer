@@ -2,7 +2,7 @@ import {describe, expect, it} from "vitest";
 import type {BlendMode} from "ag-psd";
 import {resolveBlendMode} from "@/lib/psd/blendMode";
 
-// Canvas 2Dに対応する演算が無い10個（ADR-0002）
+// The 10 with no corresponding operation in Canvas 2D (ADR-0002)
 const UNSUPPORTED: BlendMode[] = [
   "dissolve",
   "linear burn",
@@ -52,7 +52,7 @@ const ALL_BLEND_MODES: BlendMode[] = [
 
 describe("resolveBlendMode", () => {
   it.each(UNSUPPORTED)(
-    "「%s」は対応する演算が無いのでnormalへ倒し、未対応として記録される",
+    "falls %s back to normal and records it as unsupported",
     (blendMode) => {
       expect(resolveBlendMode(blendMode)).toEqual({
         operation: "source-over",
@@ -61,35 +61,35 @@ describe("resolveBlendMode", () => {
     },
   );
 
-  it("BlendModeのどの値を渡しても例外を投げない", () => {
+  it("never throws for any value of BlendMode", () => {
     for (const blendMode of ALL_BLEND_MODES) {
       expect(() => resolveBlendMode(blendMode)).not.toThrow();
     }
   });
 
-  it("blendModeがundefinedのときは通常合成として扱い、未対応にしない", () => {
+  it("treats undefined as normal compositing without marking it unsupported", () => {
     expect(resolveBlendMode(undefined)).toEqual({
       operation: "source-over",
       isSupported: true,
     });
   });
 
-  it("pass throughは合成演算ではないので、未対応にせず通常合成を返す", () => {
+  it("returns normal compositing for pass through without marking it unsupported", () => {
     expect(resolveBlendMode("pass through")).toEqual({
       operation: "source-over",
       isSupported: true,
     });
   });
 
-  it("写せるモードは17個ある", () => {
+  it("maps exactly 17 blend modes", () => {
     const supported = ALL_BLEND_MODES.filter(
       (mode) => mode !== "pass through" && resolveBlendMode(mode).isSupported,
     );
     expect(supported).toHaveLength(17);
   });
 
-  it("linear dodgeは加算合成のlighterへ写す", () => {
-    // ブレンドモードではないが、下地が不透明なら覆い焼き(リニア)と一致する
+  it("maps linear dodge onto the additive lighter", () => {
+    // Not a blend mode, but it agrees with linear dodge when the backdrop is opaque
     expect(resolveBlendMode("linear dodge")).toEqual({
       operation: "lighter",
       isSupported: true,
