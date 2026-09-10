@@ -145,7 +145,11 @@ hooks/
 
 components/
 ├─ file-import/DropZone.tsx     ← only writes the File into an atom
+├─ file-import/FilePicker.tsx   ← the <input type="file">
+├─ file-import/LoadError.tsx    ← the error line along the bottom
 ├─ viewer/CanvasViewport.tsx    ← calls usePsdDocument and does the drawing
+├─ viewer/DocumentName.tsx      ← the filename in the toolbar
+├─ viewer/LoadingOverlay.tsx    ← the loading indicator
 ├─ viewer/ZoomToggle.tsx
 ├─ layers/LayerPanel.tsx
 ├─ layers/LayerRow.tsx
