@@ -1,106 +1,109 @@
-# ドキュメント表記規約
+# Writing style
 
-Markdown、コード内コメント、コミットメッセージで守る日本語表記のルール。個人開発なので厳格な運用は求めず、読みやすさを保つための最低限をまとめる。
+Rules for Markdown, code comments, commit messages, and PR bodies. This is a solo project, so this covers the minimum needed to keep things readable rather than a strict house style.
 
-## 何をどこに書くか
+**Everything committed to this repository is written in English.** Two things are outside that rule, both recorded in [ADR-0005](../../docs/adr/0005-repository-language.md): user-facing UI strings, which become bilingual through i18n; and the Japanese trigger phrases in each skill's `description` frontmatter, which are matching text rather than prose. The language a skill *converses* in is decided by that skill, not here.
 
-| 書くもの | 置き場所 | テンプレート |
+## What goes where
+
+| Subject | Location | Template |
 | --- | --- | --- |
-| これから作る機能の仕様 | `docs/design/` | [docs/design/template.md](../../docs/design/template.md) |
-| 技術的な決定と理由 | `docs/adr/` | [docs/adr/template.md](../../docs/adr/template.md) |
-| 用語の表記と識別子の対応 | [docs/glossary.md](../../docs/glossary.md) | — |
+| The spec for something being built | `docs/design/` | [docs/design/template.md](../../docs/design/template.md) |
+| A technical decision and its reasoning | `docs/adr/` | [docs/adr/template.md](../../docs/adr/template.md) |
+| Terms and their identifiers | [docs/glossary.md](../../docs/glossary.md) | — |
 
-詳細は[docs/README.md](../../docs/README.md)を参照。用語は`docs/glossary.md`の表記に従い、同じものを指す語を複数使わない。
+See [docs/README.md](../../docs/README.md) for details. Follow the wording in `docs/glossary.md`, and do not use two words for the same thing.
 
-## 表記
+## Notation
 
-### 英数字と日本語の間にスペースを入れない
+### Use backticks for code references
 
-```
-Bad:  Next.js + React で構成
-Good: Next.js + Reactで構成
-
-Bad:  `npm run dev` で起動
-Good: `npm run dev`で起動
-```
-
-構造的なスペースは維持する。見出し記号（`# 見出し`）、リスト記号（`- 項目`）、引用（`> 引用`）、英文同士の単語間、コロン後（`Why: 理由`）、区切り目的のスラッシュ前後（`parse / render`）。
-
-### コード参照にはバッククォートを使う
-
-ファイル名、コマンド、環境変数、パッケージ名、型名、具体的な値はバッククォートで囲む。
+Wrap file names, commands, environment variables, package names, type names, and literal values in backticks.
 
 ```
-Good: `lib/psd.ts`でパース処理をまとめる
-Good: `ag-psd`はブラウザAPIに依存する
-Good: `blendMode`が`"multiply"`のとき合成方法を変える
+Good: parsing lives in `lib/psd.ts`
+Good: `ag-psd` depends on browser APIs
+Good: when `blendMode` is `"multiply"`, compositing changes
 ```
 
-### 並列の書き分け
+### Punctuation and lists
 
-関連する概念の並列には中黒「・」を使い、3つ以上の独立した項目の列挙には読点「、」を使う。
+- Use the Oxford comma.
+- For a pair of alternatives, use a spaced slash: `parse / render`.
+- Use an em dash for an aside — like this — without spaces around it.
 
-```
-Good: パース・合成・描画の3段階に分ける
-Good: app、components、hooksを確認する
-```
+### Register
 
-### 文体
+- Present tense, active voice.
+- Imperative for procedures: "run `npm test`", not "you should run `npm test`".
+- Do not write "we". State the rule.
+- Sentence case for headings, not Title Case.
+- Contractions are fine. Aim for plain, not formal.
+- US spelling.
+- No space before a unit: `100MB`, `4GB`, `8192px`.
 
-日本語・常体で書く。識別子やAPI名は原文（英語）のままでよい。
+### Bold carries the load-bearing claim
+
+This repository puts the one claim a paragraph exists to make in `**bold**`, and leaves the rest unmarked. Keep doing that. A document where everything is bold, or nothing is, makes the reader re-derive what matters.
 
 ## Markdown
 
-- コードブロックには言語アノテーションを付ける（` ```bash `、` ```typescript `）。
-- 既存ファイルへの参照はMarkdownリンクにする。リンク先は書いているファイルからの相対パスにする。未作成のファイルにはリンクを貼らず、バッククォート + `（未作成）`で書く。
+- Annotate code blocks with a language (` ```bash `, ` ```typescript `).
+- Link to existing files with a relative Markdown link, relative to the file being written. Do not link to a file that does not exist yet — write it in backticks followed by `(not written yet)`.
 
 ```
-Good: [用語集](../../docs/glossary.md)
-Good: `docs/runbooks/deploy.md`（未作成）
+Good: [glossary](../../docs/glossary.md)
+Good: `docs/runbooks/deploy.md` (not written yet)
 ```
 
-## コミットメッセージ
+## Commit messages
 
-`type(scope): 日本語の説明`の形を推奨する。scopeは付けなくてよい。
+Prefer `type(scope): description`. The scope is optional. Start lowercase, no trailing period.
 
-```
-Good: feat(viewer): レイヤの不透明度スライダーを追加
-Good: fix: ImageBitmapの解放漏れを修正
-```
-
-## 文章品質
-
-### LLM調の空虚な定型表現を避ける
-
-中身のない定型表現を使わない。主張は直接述べる。
-
-- 予告・宣言の定型: 「重要なのは〜である」「本章では〜を扱う」「まとめると」
-- 空虚な修飾: 「不可欠」「鍵となる」「根本的」（説明のない強調）、「多角的」「包括的」（具体のない網羅）
-- 中身のない動詞: 「掘り下げる」「言語化する」（実演のない宣言）
+**Say what changed, not what you did.**
 
 ```
-Bad:  本セクションではCanvas描画について多角的に掘り下げる。
-Good: Canvas描画のcleanupとメモリ解放の手順を説明する。
+Bad:  feat(viewer): add opacity slider work
+Good: feat(viewer): add a per-layer opacity slider
+Good: fix: release ImageBitmap so repeated loads stop leaking
 ```
 
-実際の不確実性を表すヘッジ表現（「かもしれない」「ようだ」等）は残す。
+See [commit](../skills/commit/SKILL.md) for how `type` and `scope` are chosen.
 
-### 冗長な記述を避ける
+## Writing quality
 
-- 同じ主張を繰り返さない。提示した直後に言い換えて要約しない
-- 自問自答や想定読者の反応（「〜と感じたかもしれない。そのとおりである」）を書かない
-- 読者が補える中間ステップは説明しない
+### Avoid hollow phrasing
 
-```
-Bad:  ImageBitmapを解放する。つまり使い終わったら解放するということである。
-Good: 使い終わったImageBitmapは`close()`で解放する。
-```
+Do not use filler that carries no content. State the claim directly.
 
-### 曖昧な指示語を残さない
-
-読み返さずに理解できるように、指示語の中身をその場で示す。
+- Announcements: "It's important to note that", "In this section we will", "In summary", "Let's dive in"
+- Empty intensifiers: crucial, key, fundamental, seamless, robust, comprehensive, holistic, leverage
+- Hollow verbs: "delve into", "unpack", "explore" with nothing following
+- Padding structures: "not only X but also Y", and rule-of-three lists where the third item exists to make three
 
 ```
-Bad:  これを実行するとメモリが解放される。
-Good: `bitmap.close()`を呼ぶとGPUメモリが解放される。
+Bad:  This section explores canvas rendering from multiple angles.
+Good: Canvas cleanup releases the bitmap and cancels the pending frame.
+```
+
+Keep hedges that express real uncertainty ("may", "seems", "probably").
+
+### Avoid redundancy
+
+- Do not make the same point twice. Do not restate something in different words right after saying it.
+- Do not write self-questions or anticipate the reader's reaction ("You may be wondering whether… You are right.").
+- Do not spell out steps the reader can fill in.
+
+```
+Bad:  Release the ImageBitmap. In other words, free it when you are done.
+Good: Call `bitmap.close()` when the bitmap is no longer needed.
+```
+
+### No vague demonstratives
+
+Name what a pronoun refers to, so a sentence works without re-reading the one before it.
+
+```
+Bad:  Running this frees the memory.
+Good: Calling `bitmap.close()` frees the GPU memory.
 ```
