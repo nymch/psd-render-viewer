@@ -35,6 +35,7 @@ This is a solo project, so skills stand in for the reviewer and the person to th
 - `/write-adr` — settle a technical decision, into `docs/adr/`
 - `/devils-advocate` — argue against a finished document
 - `/grilling` — general-purpose interrogation
+- `/create-issue` — file a bug or a deferred task as an issue
 - `/commit` — analyze the changes and commit
 - `/create-pr` — self-review the diff and open a PR
 
