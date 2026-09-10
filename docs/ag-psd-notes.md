@@ -1,3 +1,7 @@
+# ag-psd notes
+
+What `ag-psd` actually does, established by running it and by reading its type definitions. **Pinned to the installed version** — a version bump invalidates these notes until they are re-checked.
+
 ## `ag-psd`の実API
 
 導入済みの**ag-psd 31.0.2**（MIT）について確認した内容。選定の経緯は[ADR-0001](adr/0001-psd-parser.md)を参照。
@@ -125,4 +129,3 @@ initializeCanvas((width, height) => new OffscreenCanvas(width, height) as unknow
 ```
 
 `initializeCanvas`は`ag-psd`本体からexportされている。
-

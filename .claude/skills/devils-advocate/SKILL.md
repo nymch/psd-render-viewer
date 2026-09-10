@@ -26,7 +26,7 @@ If a path was passed as an argument, use it. Otherwise `Glob` `docs/design/` and
 
 `Read` the target **in full**. Look at the whole document, not a diff.
 
-Also read what the reasoning rests on: [docs/glossary.md](../../../docs/glossary.md), any related existing ADR, and the implementation the document refers to.
+Also read what the reasoning rests on: [docs/glossary.md](../../../docs/glossary.md), [docs/ag-psd-notes.md](../../../docs/ag-psd-notes.md), any related existing ADR, and the implementation the document refers to.
 
 ### 2. Apply each viewpoint in turn
 

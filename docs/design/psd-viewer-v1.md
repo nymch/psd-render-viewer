@@ -8,7 +8,7 @@
 
 `ag-psd`の採用は[ADR-0001](../adr/0001-psd-parser.md)で決めたが、描画するコードはまだ無い。現状は`app/psd-check/page.tsx`でパースが通ることを確認しているだけで、Canvasには何も描いていない。
 
-[用語集](../glossary.md)にまとめた罠——`children[0]`が最背面であること、グループの不透明度が子に継承されないこと、`hidden`の意味が反転していること——は、間違えても「なんとなく違う絵」にしかならない。実物を描いて初めて判定できる。まずそこを通す。
+[ag-psdの実API](../ag-psd-notes.md)にまとめた罠——`children[0]`が最背面であること、グループの不透明度が子に継承されないこと、`hidden`の意味が反転していること——は、間違えても「なんとなく違う絵」にしかならない。実物を描いて初めて判定できる。まずそこを通す。
 
 ## ゴール
 
@@ -61,7 +61,7 @@
 
 ### 扱うデータ
 
-`ag-psd`から読むもの。読み込みオプションは[用語集](../glossary.md)のとおり`useImageData: true`・`skipCompositeImageData: true`・`skipThumbnail: true`。
+`ag-psd`から読むもの。読み込みオプションは[ag-psdの実API](../ag-psd-notes.md)のとおり`useImageData: true`・`skipCompositeImageData: true`・`skipThumbnail: true`。
 
 | 用途 | 出どころ | 変換 |
 | --- | --- | --- |
@@ -185,7 +185,7 @@ DropZone           読み込みの試みを{status:"parsing", file}にする
 
 ノードを`children`の順（背面から）に走査し、次の規則で描く。
 
-- **レイヤー** — 自分の`OffscreenCanvas`へ`imageData`を`putImageData`し、レイヤーマスクがあれば後述の手順で掛ける。できたバッファを、親バッファへ`blendMode`と`opacity`を適用して`drawImage`する。`imageData`の型は`PixelData`で`ImageData`とは別物なので、`data instanceof Uint8ClampedArray`で絞り込んでから`putImageData`へ渡す（[用語集](../glossary.md)を参照）
+- **レイヤー** — 自分の`OffscreenCanvas`へ`imageData`を`putImageData`し、レイヤーマスクがあれば後述の手順で掛ける。できたバッファを、親バッファへ`blendMode`と`opacity`を適用して`drawImage`する。`imageData`の型は`PixelData`で`ImageData`とは別物なので、`data instanceof Uint8ClampedArray`で絞り込んでから`putImageData`へ渡す（[ag-psdの実API](../ag-psd-notes.md)を参照）
 - **グループ（`blendMode`が`"pass through"`以外）** — 自分の`OffscreenCanvas`を作り、子を再帰的にそこへ描く。できたバッファへグループのマスクを掛け、親バッファへグループの`blendMode`と`opacity`を適用して`drawImage`する
 - **グループ（`"pass through"`）** — 子を**親のバッファへ直接**描く。グループの`opacity`は子の`opacity`へ掛け合わせて渡す
 - **`clipping: true`のレイヤー** — 後述
@@ -204,7 +204,7 @@ DropZone           読み込みの試みを{status:"parsing", file}にする
 
 分離グループの`opacity`は`tree.ts`ではグループのノードに残したままにする。両方で掛けると、不透明度50%のグループの中の100%のレイヤーが25%になる。
 
-[用語集](../glossary.md)の「ag-psdは親をさかのぼって掛け合わせた不透明度を提供しない」は、**掛け合わせを`tree.ts`で常にやれという意味ではない。**分離モデルでは分離グループの分を`composite.ts`が受け持つ。
+[ag-psdの実API](../ag-psd-notes.md)の「ag-psdは親をさかのぼって掛け合わせた不透明度を提供しない」は、**掛け合わせを`tree.ts`で常にやれという意味ではない。**分離モデルでは分離グループの分を`composite.ts`が受け持つ。
 
 ### 中間バッファのサイズ
 

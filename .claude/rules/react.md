@@ -110,7 +110,7 @@ One component per file, as a rule. A small subcomponent used only within that fi
 
 ## Canvas and PSD rendering
 
-The core of this project: parse a PSD with `ag-psd` and draw it with Canvas 2D. The choice of parser is recorded in [ADR-0001](../../docs/adr/0001-psd-parser.md); the library's real behavior is documented in [docs/glossary.md](../../docs/glossary.md).
+The core of this project: parse a PSD with `ag-psd` and draw it with Canvas 2D. The choice of parser is recorded in [ADR-0001](../../docs/adr/0001-psd-parser.md); the library's real behavior is documented in [docs/ag-psd-notes.md](../../docs/ag-psd-notes.md).
 
 - `ag-psd` parsing depends on browser APIs, so keep it inside `"use client"`. Put the parsing itself in `lib/`, separate from components. Pass `useImageData: true`, `skipCompositeImageData: true`, and `skipThumbnail: true` to `readPsd`.
 - Parsing and compositing run in a Web Worker so the main thread is never blocked. See [ADR-0004](../../docs/adr/0004-worker-offloading.md) for the design: a fresh worker per load, terminated on completion, failure, or replacement.
