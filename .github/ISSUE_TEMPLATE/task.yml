@@ -1,0 +1,49 @@
+name: Task
+description: Something to do later that should not be lost
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For anything deferred on purpose: a fix a PR chose not to fold in, a decision put off, a
+        piece of documentation the code has outgrown. **Write down why it was left, not just what
+        is left** — the reason is what decides whether it is still worth doing.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What needs doing
+    validations:
+      required: true
+
+  - type: textarea
+    id: origin
+    attributes:
+      label: Where it came from
+      description: The PR, ADR, or spec section that left it behind, and why it was left rather than done.
+      placeholder: |
+        Found while translating comments in #14. Left alone because narrowing the overlay changes
+        behavior, and that PR was a translation.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What it needs first
+      description: >-
+        A task that changes what the app does needs a spec before code; one that picks between
+        approaches needs an ADR. Everything else can go straight to a branch.
+      options:
+        - Can be done directly
+        - Needs a spec — /write-spec
+        - Needs a decision — /write-adr
+        - Not sure yet
+      default: 0
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: Optional. What has to be true to close this.

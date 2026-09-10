@@ -1,0 +1,102 @@
+name: Bug report
+description: Something renders wrong, fails to open, or gets slow
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Write down what was observed, and keep guesses about the cause out of it until the last field.**
+        Three symptoms once looked like one problem here — degrading over repeated loads, freezing on
+        each load, and refusing to open at all — and they had three separate causes. Splitting them is
+        what made them fixable.
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: What happened
+      description: Observed facts only. What was on screen, what the console said, what the numbers were.
+      placeholder: |
+        Opening a 140MB PSD draws the background layer over everything else.
+        No errors in the console.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What was expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Enough that it can be hit again cold. Say if it only happens sometimes.
+      placeholder: |
+        1. `npm run dev`
+        2. Drop the file onto the canvas
+        3. Happens every time
+    validations:
+      required: true
+
+  - type: textarea
+    id: psd
+    attributes:
+      label: The PSD
+      description: >-
+        Size, layer count, nesting depth, bit depth, and anything unusual — masks, clipping,
+        pass-through groups, adjustment layers. The file itself usually cannot be attached.
+      placeholder: |
+        150MB, 70 layers, groups nested 6 deep, 8-bit.
+        Several clipping masks over a multiply base.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: data-kind
+    attributes:
+      label: Where the file came from
+      description: >-
+        Real files run 120-170MB with about 70 layers. A small PSD built for a test behaves
+        differently enough that measurements from one do not carry over to the other.
+      options:
+        - Real data
+        - A file built to reproduce this
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Narrowed down to
+      description: Leave it at the first option if it has not been narrowed yet. Guessing here is worse than not answering.
+      options:
+        - Not narrowed down yet
+        - Parsing — lib/psd/parse.ts
+        - Layer tree — lib/psd/tree.ts
+        - Compositing — lib/psd/composite.ts
+        - Masks — lib/psd/mask.ts
+        - Blend modes — lib/psd/blendMode.ts
+        - Size limits — lib/psd/limits.ts
+        - Worker — lib/psd/worker.ts
+        - UI — components/, hooks/
+      default: 0
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      description: >-
+        Include the version. Some of what this app relies on is Chrome-specific — `ImageBitmap`
+        lifetimes and the canvas area limit both are, and neither is verified elsewhere.
+      placeholder: Chrome 141 / macOS 15.6
+
+  - type: textarea
+    id: suspected
+    attributes:
+      label: Suspected cause
+      description: >-
+        Optional, and deliberately last. Say what makes it a suspicion rather than a finding, and
+        link the ADR or spec section it bears on.
