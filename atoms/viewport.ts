@@ -1,8 +1,9 @@
 import {atom} from "jotai";
 
 /**
- * 表示倍率。fitはビューポートに収まるよう縮小（拡大はしない）、actualは等倍。
- * Canvasは常にドキュメントサイズの等倍で描き、CSSの表示サイズだけを変えるので再描画は起きない。
+ * Display scale. fit shrinks to the viewport without ever enlarging; actual is 1:1.
+ * The canvas is always drawn at document size and only the CSS display size changes, so
+ * nothing is redrawn.
  */
 export type ZoomMode = "fit" | "actual";
 

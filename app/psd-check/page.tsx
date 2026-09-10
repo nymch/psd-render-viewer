@@ -1,7 +1,7 @@
 "use client";
 
-// ag-psdの読み込みを確認するための検証用ページ。
-// 正式なビューアができたら削除する。
+// A scratch page for confirming that ag-psd reads a file.
+// Deleted once the real viewer exists.
 
 import {useState} from "react";
 import {readPsd} from "ag-psd";
@@ -43,7 +43,7 @@ export default function PsdCheckPage() {
 
       const layers = flat.filter((layer) => layer.imageData);
       const first = layers[0];
-      if (!first) throw new Error("ピクセルを持つレイヤーが見つからない");
+      if (!first) throw new Error("no layer with pixels was found");
 
       setResult({
         width: psd.width,

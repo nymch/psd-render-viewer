@@ -2,18 +2,18 @@ import {buildMaskAlpha} from "@/lib/psd/mask";
 import type {Bounds, LayerNode, PixelStore} from "@/lib/psd/tree";
 
 /**
- * 分離モデルでの再帰合成。
+ * Recursive compositing, isolated model.
  *
- * DOMには触れず`OffscreenCanvas`と`ImageData`だけで完結させる。後からWeb Workerへ移すときに
- * インターフェースを変えずに済む。
+ * Touches no DOM and works entirely through `OffscreenCanvas` and `ImageData`, so moving it
+ * into a Web Worker later takes no change to the interface.
  */
 
 type Origin = {x: number; y: number};
 
-/** 描き終えたノード1つ分。originはバッファの左上のドキュメント座標 */
+/** One finished node. origin is the buffer's top-left in document coordinates */
 type Rendered = {canvas: OffscreenCanvas; origin: Origin};
 
-/** クリッピングのまとまり。baseは直前の非クリッピングノード */
+/** A clipping run. base is the nearest non-clipping node below */
 type Run =
   | {kind: "plain"; node: LayerNode}
   | {kind: "clip"; base: LayerNode; clipped: LayerNode[]};
@@ -61,8 +61,9 @@ function drawNodes(
     const node = run.node;
     if (!node.visible) continue;
 
-    // 通過グループは自分のバッファを持たず、親へ直接描く。
-    // マスクが付いている場合だけは掛ける相手が要るので、分離グループと同じ経路へ回す。
+    // A pass-through group has no buffer of its own and draws straight into the parent.
+    // Only when it carries a mask does it need something to apply that to, so it goes down the
+    // same path as an isolated group.
     if (node.kind === "group" && !node.isolated && node.mask === null) {
       drawNodes(ctx, origin, node.children, context);
       continue;
@@ -76,11 +77,12 @@ function drawNodes(
 }
 
 /**
- * クリッピングのまとまりを合成する。
+ * Composites a clipping run.
  *
- * ベースの`blendMode`と`opacity`を手順1ではなく手順4で使うのは、Photoshopの
- * 「クリッピングレイヤーをグループとして合成」がオンのときの挙動に合わせるため。
- * 手順1で乗算などを適用すると、クリッピングレイヤーが合成後のベースに重なって絵が変わる。
+ * The base's `blendMode` and `opacity` are used in step 4 rather than step 1 to match
+ * Photoshop's behavior when "blend clipped layers as group" is on. Applying multiply and the
+ * like in step 1 would put the clipping layers on top of an already-composited base, changing
+ * the picture.
  */
 function drawClipRun(
   ctx: OffscreenCanvasRenderingContext2D,
@@ -91,7 +93,7 @@ function drawClipRun(
   if (!run.base.visible) return;
 
   const base = renderNode(run.base, context);
-  // ベースが描けないならクリッピングレイヤーの寄る辺が無いので、まとまりごと消える
+  // With no base to draw, the clipping layers have nothing to sit on, so the run disappears
   if (base === null) return;
 
   const visibleClipped = run.clipped.filter((node) => node.visible);
@@ -117,10 +119,10 @@ function drawClipRun(
   const bufferCtx = getContext(buffer);
   const bufferOrigin: Origin = {x: extent.left, y: extent.top};
 
-  // 1. ベースを通常合成・不透明度1で置く
+  // 1. Lay the base down with normal compositing and opacity 1
   compositeOnto(bufferCtx, bufferOrigin, base, "source-over", 1);
 
-  // 2. クリッピングレイヤー群をそれぞれの描画モードで重ねる
+  // 2. Stack the clipping layers, each with its own blend mode
   for (const node of visibleClipped) {
     const rendered = renderNode(node, context);
     if (rendered === null) continue;
@@ -134,11 +136,11 @@ function drawClipRun(
     rendered.canvas.width = 0;
   }
 
-  // 3. ベースのアルファで切り抜く
+  // 3. Clip to the base's alpha
   compositeOnto(bufferCtx, bufferOrigin, base, "destination-in", 1);
   base.canvas.width = 0;
 
-  // 4. ベースの描画モードと不透明度でまとまり全体を親へ
+  // 4. Composite the whole run into the parent with the base's blend mode and opacity
   compositeOnto(
     ctx,
     origin,
@@ -149,7 +151,7 @@ function drawClipRun(
   buffer.width = 0;
 }
 
-/** ノード1つを自分のバッファへ描く。マスクは適用済み、描画モードと不透明度は未適用 */
+/** Draws one node into its own buffer. The mask is applied; blend mode and opacity are not */
 function renderNode(node: LayerNode, context: Context): Rendered | null {
   if (!node.visible) return null;
 
@@ -169,7 +171,7 @@ function renderNode(node: LayerNode, context: Context): Rendered | null {
       canvas.width = 0;
       return null;
     }
-    // 負のオフセットになりうるが、putImageDataは範囲外を切り落とすので問題ない
+    // The offset can go negative, which is fine: putImageData clips what falls outside
     ctx.putImageData(
       new ImageData(source.data, source.width, source.height),
       node.bounds.left - origin.x,
@@ -194,7 +196,8 @@ function applyMask(
   if (maskPixels === undefined) return;
 
   const alpha = buildMaskAlpha(node.mask, maskPixels, target);
-  // putImageDataは合成演算を無視するため、一時バッファを経由してdrawImageで掛ける
+  // putImageData ignores compositing operations, so this goes through a scratch buffer and
+  // applies it with drawImage
   const maskCanvas = new OffscreenCanvas(alpha.width, alpha.height);
   getContext(maskCanvas).putImageData(
     new ImageData(alpha.data, alpha.width, alpha.height),
@@ -228,8 +231,8 @@ function compositeOnto(
 }
 
 /**
- * クリッピングレイヤーを直前の非クリッピングレイヤーへまとめる。
- * `children`は背面からの順なので、直前の要素が下のレイヤーにあたる。
+ * Groups clipping layers onto the nearest non-clipping layer below.
+ * `children` runs back to front, so the preceding element is the layer underneath.
  */
 function toRuns(nodes: LayerNode[]): Run[] {
   const runs: Run[] = [];
@@ -249,8 +252,9 @@ function toRuns(nodes: LayerNode[]): Run[] {
 }
 
 /**
- * ノードが実際に描く範囲。バッファをドキュメントサイズで取らないための計算。
- * グループは子孫の範囲の和集合になる。マスクは範囲を狭めるだけなので考えなくてよい。
+ * The area a node actually draws into, computed so that buffers need not be allocated at
+ * document size. A group's is the union of its descendants'. A mask only narrows the area, so
+ * it does not enter into this.
  */
 function nodeExtent(node: LayerNode): Bounds | null {
   if (!node.visible) return null;

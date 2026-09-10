@@ -12,7 +12,7 @@ type LayerRowProps = {
 
 export function LayerRow({node, depth}: LayerRowProps) {
   const isGroup = node.kind === "group";
-  // ag-psdのopenedはPSDが持つ開閉状態。無ければ開いた状態から始める
+  // ag-psd's opened is the expanded state the PSD carries. Absent, start expanded
   const [isOpen, setIsOpen] = useState(true);
 
   return (
@@ -63,7 +63,7 @@ export function LayerRow({node, depth}: LayerRowProps) {
       </div>
 
       {isGroup && isOpen && node.children.length > 0 && (
-        // childrenは背面からの順。パネルはPhotoshopに合わせて上が最前面になるよう逆順にする
+        // children runs back to front. The panel reverses it so the front is on top, as in Photoshop
         <ul>
           {[...node.children].reverse().map((child) => (
             <LayerRow key={child.id} node={child} depth={depth + 1} />

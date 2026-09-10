@@ -7,12 +7,13 @@ import {zoomModeAtom} from "@/atoms/viewport";
 import {usePsdDocument} from "@/hooks/psdHooks";
 
 /**
- * パースから描画までを担う。Canvasは常にドキュメントサイズの等倍で描き、
- * 表示倍率はCSSの表示サイズだけを変えるので再描画は起きない。
+ * Covers everything from parsing to drawing. The canvas is always drawn 1:1 at document size,
+ * and scale changes only the CSS display size, so nothing is redrawn.
  *
- * 中央寄せに`justify-center`を使わない。空きが無いときに両側へ均等にはみ出し、
- * 開始側のはみ出しへスクロールで到達できなくなる（`scrollWidth`にも含まれない）。
- * autoマージンなら空きが無いとき0に潰れて開始位置に揃うので、すべて見られる。
+ * Centering does not use `justify-center`. With no slack it overflows equally on both sides,
+ * and the overflow on the leading side becomes unreachable by scrolling (it is not in
+ * `scrollWidth` either). An auto margin collapses to 0 when there is no slack, aligning to the
+ * start, so everything stays reachable.
  */
 export function CanvasViewport() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -28,9 +29,9 @@ export function CanvasViewport() {
         ref={canvasRef}
         className={
           zoomMode === "fit"
-            ? // 縮小はするが拡大はしない。h-autoが無いと縦横比が崩れる
+            ? // Shrinks but never enlarges. Without h-auto the aspect ratio breaks
               "mx-auto h-auto max-h-full w-auto max-w-full object-contain"
-            : // 等倍。収まらない分はDropZoneのoverflow-autoでスクロールする
+            : // 1:1. Whatever does not fit scrolls through DropZone's overflow-auto
               "mx-auto max-w-none shrink-0"
         }
         hidden={loaded === null}

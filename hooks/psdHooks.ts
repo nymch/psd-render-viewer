@@ -8,13 +8,13 @@ import {layerTreeAtom} from "@/atoms/layers";
 import type {WorkerRequest, WorkerResponse} from "@/lib/psd/workerMessage";
 
 /**
- * ファイルを開いてからCanvasへ描くまでを担う。
+ * Covers everything from opening a file to drawing it on the canvas.
  *
- * パースと合成はWorkerで行う。`readPsd`は同期関数なので、メインスレッドで呼ぶと
- * パースの間ずっとUIが止まる。判断の経緯はADR-0004を参照。
+ * Parsing and compositing happen in a worker. `readPsd` is synchronous, so calling it on the
+ * main thread stops the UI for the whole parse. The reasoning is in ADR-0004.
  *
- * Workerは読み込みごとに生成し、完了・失敗・差し替えでterminateする。展開済みピクセルが
- * Workerごと消えるため、解放漏れが構造的に起きない。
+ * A worker is created per load and terminated on completion, failure, or replacement. Decoded
+ * pixels die with the worker, so a leak cannot happen structurally.
  */
 export function usePsdDocument(
   canvasRef: RefObject<HTMLCanvasElement | null>,
@@ -24,9 +24,9 @@ export function usePsdDocument(
   const setDocument = useSetAtom(documentAtom);
   const setLayerTree = useSetAtom(layerTreeAtom);
 
-  // 表示中のドキュメント。描画のきっかけにする
+  // The document on display. What triggers a draw
   const loaded = useAtomValue(documentAtom);
-  // 合成結果のRGBA。巨大なのでstateには入れない
+  // The composited RGBA. Too large to put in state
   const imageRef = useRef<ImageData | null>(null);
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export function usePsdDocument(
         return;
       }
 
-      // 前のファイルの資源を先に解放する
+      // Release the previous file's resources first
       imageRef.current = new ImageData(
         new Uint8ClampedArray(result.pixels),
         result.width,
@@ -75,7 +75,7 @@ export function usePsdDocument(
     const send = async () => {
       const buffer = await file.arrayBuffer();
       const request: WorkerRequest = {buffer};
-      // ArrayBufferはtransferableなので所有権ごと渡す
+      // An ArrayBuffer is transferable, so ownership goes with it
       worker.postMessage(request, [buffer]);
     };
 
@@ -88,13 +88,13 @@ export function usePsdDocument(
       worker.terminate();
     });
 
-    // 読み込み中に別のファイルが来たら、走っているWorkerごと捨てる
+    // Another file arriving mid-load throws away the running worker with it
     return () => worker.terminate();
   }, [attempt, setAttempt, setDocument, setLayerTree]);
 
-  // 合成結果をCanvasへ移す。Canvasの寸法が変わると中身が消えるため、描画はここにまとめる。
-  // 依存を付けないと再レンダーのたびにドキュメント大の書き込みが走るので、
-  // 表示中のドキュメントが変わったときだけにする。
+  // Move the composited result onto the canvas. Changing a canvas's dimensions wipes its
+  // contents, so drawing is concentrated here. Without the dependency, every re-render would
+  // run a document-sized write, so this fires only when the document on display changes.
   useEffect(() => {
     const canvas = canvasRef.current;
     const image = imageRef.current;

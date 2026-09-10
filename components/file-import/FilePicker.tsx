@@ -4,10 +4,10 @@ import {useSetAtom} from "jotai";
 import {loadAttemptAtom} from "@/atoms/document";
 
 /**
- * ツールバーのファイル選択。ドロップと同じくFileをatomへ書くだけ。
+ * The toolbar's file picker. Like the drop target, it only writes the File into an atom.
  *
- * 読み込み中も受け付ける。パースはWorkerで走っており、差し替えは走っているWorkerを
- * terminateするだけで済むため、二重に走る心配がない。
+ * Accepted during a load too. Parsing runs in a worker and replacing one is just a terminate on
+ * the running worker, so there is no risk of two running at once.
  */
 export function FilePicker() {
   const setAttempt = useSetAtom(loadAttemptAtom);
@@ -22,7 +22,7 @@ export function FilePicker() {
         onChange={(event) => {
           const file = event.target.files?.[0];
           if (file !== undefined) setAttempt({status: "parsing", file});
-          // 同じファイルをもう一度選べるようにする
+          // So that the same file can be picked again
           event.target.value = "";
         }}
       />

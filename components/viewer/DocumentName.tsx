@@ -3,7 +3,7 @@
 import {useAtomValue} from "jotai";
 import {documentAtom} from "@/atoms/document";
 
-/** ツールバーに出す、いま表示中のドキュメントの名前。エラーの出所と取り違えないための表示 */
+/** The name of the document on display, in the toolbar. Keeps it apart from where an error came from */
 export function DocumentName() {
   const loaded = useAtomValue(documentAtom);
   if (loaded === null) return null;

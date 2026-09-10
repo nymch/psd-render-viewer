@@ -1,6 +1,6 @@
 import {atom} from "jotai";
 
-/** 画面に出ているドキュメント。読み込みに成功したときだけ差し替わる */
+/** The document on screen. Replaced only when a load succeeds */
 export type LoadedDocument = {
   fileName: string;
   width: number;
@@ -8,11 +8,11 @@ export type LoadedDocument = {
 };
 
 /**
- * 最後に開こうとしたファイルの結果。
+ * The outcome for the file most recently opened.
  *
- * 表示中のドキュメントとは別に持つ。読み込みに失敗しても前の描画は消さないため、
- * 「画面に出ているのはAのツリー、失敗したのはB」という状態になりうる。
- * 1つのunionに混ぜるとどちらのファイルのものか表現できない。
+ * Kept apart from the document on display. A failed load leaves the previous render alone, so
+ * "the tree on screen is A's, the failure is B's" is a reachable state. Mixed into a single
+ * union, there is no way to express which file the tree belongs to.
  */
 export type LoadAttempt =
   | {status: "idle"}

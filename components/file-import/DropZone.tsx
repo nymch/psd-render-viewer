@@ -10,11 +10,11 @@ type DropZoneProps = {
 };
 
 /**
- * Canvas領域を包んでドラッグ&ドロップを受ける。受け取ったFileをatomへ書くだけで、
- * パースはCanvasViewportが担う。
+ * Wraps the canvas area and takes drag and drop. It only writes the File it receives into an
+ * atom; parsing is CanvasViewport's job.
  *
- * 読み込み中も受け付ける。差し替えは走っているWorkerをterminateするだけで済むため、
- * パースが二重に走らない。
+ * Accepted during a load too. Replacing one is just a terminate on the running worker, so two
+ * parses never run at once.
  */
 export function DropZone({children}: DropZoneProps) {
   const setAttempt = useSetAtom(loadAttemptAtom);
@@ -36,7 +36,8 @@ export function DropZone({children}: DropZoneProps) {
       }}
       onDragLeave={() => setIsOver(false)}
       onDrop={handleDrop}
-      // min-w-0とmin-h-0が無いとflexの子がminサイズautoのままで、内容に合わせて広がりfitが効かない
+      // Without min-w-0 and min-h-0 a flex child keeps its auto min size, growing to fit its
+      // contents so that fit never takes effect
       className={`flex min-h-0 min-w-0 flex-1 overflow-auto p-4 ${
         isOver ? "bg-blue-50 dark:bg-blue-950" : ""
       }`}

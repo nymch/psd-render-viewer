@@ -1,8 +1,9 @@
 import type {Bounds, MaskRef, PixelSource} from "@/lib/psd/tree";
 
 /**
- * `destination-in`へ渡すためのアルファ画像。RGBAの並びで、アルファにだけ意味がある。
- * `ImageData`ではなく素のオブジェクトで返すのは、Nodeでの単体テストのため。
+ * An alpha image to hand to `destination-in`. Laid out as RGBA, where only alpha carries
+ * meaning. It comes back as a plain object rather than an `ImageData` so that it can be unit
+ * tested under Node.
  */
 export type AlphaMap = {
   data: Uint8ClampedArray<ArrayBuffer>;
@@ -11,16 +12,17 @@ export type AlphaMap = {
 };
 
 /**
- * レイヤーマスクをアルファ画像に組み替える。
+ * Rebuilds a layer mask into an alpha image.
  *
- * ag-psdはマスクの濃淡をRGBの各チャンネルへ複製し、アルファは全面255で返す。
- * `globalCompositeOperation = "destination-in"`はソースのアルファを見る演算なので、
- * `mask.imageData`をそのまま渡すと濃淡が無視され、マスク矩形での矩形切り抜きにしかならない。
- * Rチャンネルの値をアルファへ移す必要がある。
+ * ag-psd copies the mask's gradations into each RGB channel and returns alpha at 255
+ * everywhere. `globalCompositeOperation = "destination-in"` looks at the source's alpha, so
+ * handing it `mask.imageData` directly ignores the gradations and produces nothing but a
+ * rectangular cut at the mask's bounds. The R channel has to be moved into alpha.
  *
- * `destination-in`は描画範囲の外も含めた宛先全体に効くため、対象の矩形いっぱいの大きさで作り、
- * マスク矩形の外側は`defaultColor`で埋める。これをしないと、マスク矩形がレイヤーより小さく
- * `defaultColor`が255（矩形外は表示）のときに矩形外が消える。
+ * `destination-in` affects the whole destination, including the area outside what was drawn,
+ * so this is built at the full size of the target rectangle with everything outside the mask
+ * rectangle filled with `defaultColor`. Without that, the area outside disappears whenever the
+ * mask rectangle is smaller than the layer and `defaultColor` is 255 (outside is visible).
  */
 export function buildMaskAlpha(
   mask: MaskRef,
@@ -31,7 +33,7 @@ export function buildMaskAlpha(
   const height = target.bottom - target.top;
   const data = new Uint8ClampedArray(width * height * 4);
 
-  // Uint8ClampedArrayは0で初期化されるので、defaultColorが0のときは埋める必要がない
+  // A Uint8ClampedArray starts zeroed, so a defaultColor of 0 needs no filling
   if (mask.defaultColor !== 0) {
     for (let i = 3; i < data.length; i += 4) {
       data[i] = mask.defaultColor;
@@ -48,7 +50,7 @@ export function buildMaskAlpha(
       const source =
         ((y - mask.bounds.top) * maskPixels.width + (x - mask.bounds.left)) * 4;
       const destination = ((y - target.top) * width + (x - target.left)) * 4;
-      // RGBに同じ値が入っているのでRだけ読む
+      // R, G and B hold the same value, so only R is read
       data[destination + 3] = maskPixels.data[source] ?? 0;
     }
   }

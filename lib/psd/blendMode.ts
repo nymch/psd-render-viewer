@@ -1,12 +1,14 @@
 import type {BlendMode} from "ag-psd";
 
 /**
- * Photoshopの描画モードとCanvas 2Dの合成演算の対応。
+ * How Photoshop's blend modes map onto Canvas 2D's compositing operations.
  *
- * `null`は対応する演算が無いもの。方針はADR-0002（docs/adr/0002-blend-mode-mapping.md）で、
- * 自前のピクセル演算では埋めず`normal`へ倒して未対応として記録する。
+ * `null` means no operation corresponds. The approach is settled in ADR-0002
+ * (docs/adr/0002-blend-mode-mapping.md): rather than filling the gaps with pixel math of our
+ * own, fall back to `normal` and record the layer as unsupported.
  *
- * `"pass through"`はグループを分離するかどうかの分岐で合成演算ではないため、この表には含めない。
+ * `"pass through"` decides whether a group is isolated and is not a compositing operation, so
+ * it is not in this table.
  */
 const BLEND_MODE_MAP: Record<
   Exclude<BlendMode, "pass through">,
@@ -29,9 +31,10 @@ const BLEND_MODE_MAP: Record<
   color: "color",
   luminosity: "luminosity",
 
-  // "lighter"はブレンドモードではなく加算合成だが、下地が不透明なら覆い焼き(リニア)と
-  // 完全に一致する（飽和・半透明のソースを含めて実測）。下地が半透明のときだけアルファも
-  // 加算されて本来より不透明になる。詳細はADR-0002。
+  // "lighter" is additive compositing rather than a blend mode, but it agrees exactly with
+  // linear dodge when the backdrop is opaque (measured, saturation and semi-transparent
+  // sources included). Only over a semi-transparent backdrop does alpha get summed too,
+  // coming out more opaque than it should. Details in ADR-0002.
   "linear dodge": "lighter",
 
   dissolve: null,
@@ -45,8 +48,8 @@ const BLEND_MODE_MAP: Record<
   subtract: null,
   divide: null,
 
-  // ディスクリプタ経由（レイヤー効果・ベクトルストローク）でしか出ないため、layer.blendModeには現れない。
-  // BlendModeのunionを網羅するために置いている。
+  // These only ever arrive through a descriptor (a layer effect or a vector stroke), so they
+  // never appear on layer.blendMode. They are here to cover the BlendMode union.
   "linear height": null,
   height: null,
   subtraction: null,
@@ -55,20 +58,20 @@ const BLEND_MODE_MAP: Record<
 const FALLBACK_OPERATION: GlobalCompositeOperation = "source-over";
 
 export type BlendModeResolution = {
-  /** 実際に使う合成演算。未対応のときはフォールバック済みの値が入る */
+  /** The operation actually used. Already the fallback value when unsupported */
   operation: GlobalCompositeOperation;
-  /** falseなら対応する演算が無く、normalへ倒している */
+  /** False means no operation corresponds and it fell back to normal */
   isSupported: boolean;
 };
 
 /**
- * 描画モードを合成演算へ写す。写せないものはnormalへ倒し、`isSupported: false`で知らせる。
- * `BlendMode`のどの値を渡しても例外を投げない。
+ * Maps a blend mode onto a compositing operation. What cannot be mapped falls back to normal
+ * and reports `isSupported: false`. No value of `BlendMode` makes it throw.
  */
 export function resolveBlendMode(
   blendMode: BlendMode | undefined,
 ): BlendModeResolution {
-  // undefinedはPhotoshopの既定である通常合成として扱う。未対応ではない。
+  // undefined is treated as Photoshop's default, normal compositing. Not unsupported.
   if (blendMode === undefined || blendMode === "pass through") {
     return {operation: FALLBACK_OPERATION, isSupported: true};
   }

@@ -2,10 +2,10 @@ import {atom} from "jotai";
 import {countUnsupported} from "@/lib/psd/tree";
 import type {LayerNode} from "@/lib/psd/tree";
 
-/** 描画パラメータだけのレイヤーツリー。ピクセルは含まない */
+/** The layer tree, drawing parameters only. No pixels */
 export const layerTreeAtom = atom<LayerNode[]>([]);
 
-/** ツリーから計算できるので派生atomにする。二重に持たない */
+/** Computable from the tree, so it is a derived atom. Not held twice */
 export const unsupportedCountAtom = atom((get) =>
   countUnsupported(get(layerTreeAtom)),
 );

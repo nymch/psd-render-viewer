@@ -4,7 +4,7 @@ import {useAtomValue} from "jotai";
 import {layerTreeAtom, unsupportedCountAtom} from "@/atoms/layers";
 import {LayerRow} from "@/components/layers/LayerRow";
 
-/** 読み取り専用。atoms/layers.tsを読むだけで、パースにも描画にも関わらない */
+/** Read-only. Reads atoms/layers.ts and takes part in neither parsing nor drawing */
 export function LayerPanel() {
   const nodes = useAtomValue(layerTreeAtom);
   const unsupportedCount = useAtomValue(unsupportedCountAtom);
@@ -13,7 +13,7 @@ export function LayerPanel() {
     <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-200 dark:border-zinc-800">
       <div className="flex items-baseline justify-between border-b border-zinc-200 px-2 py-1.5 dark:border-zinc-800">
         <h2 className="text-xs font-semibold">レイヤー</h2>
-        {/* レイヤー数が多いとスクロールしないと印に気づけないので、件数をここに出す */}
+        {/* With many layers a mark sits below the fold, so the count goes here */}
         {unsupportedCount > 0 && (
           <span className="text-xs text-amber-600 dark:text-amber-400">
             未対応{unsupportedCount}件
