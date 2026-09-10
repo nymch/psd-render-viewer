@@ -9,6 +9,10 @@ import {usePsdDocument} from "@/hooks/psdHooks";
 /**
  * パースから描画までを担う。Canvasは常にドキュメントサイズの等倍で描き、
  * 表示倍率はCSSの表示サイズだけを変えるので再描画は起きない。
+ *
+ * 中央寄せに`justify-center`を使わない。空きが無いときに両側へ均等にはみ出し、
+ * 開始側のはみ出しへスクロールで到達できなくなる（`scrollWidth`にも含まれない）。
+ * autoマージンなら空きが無いとき0に潰れて開始位置に揃うので、すべて見られる。
  */
 export function CanvasViewport() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -19,20 +23,20 @@ export function CanvasViewport() {
   usePsdDocument(canvasRef);
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 items-start justify-center">
+    <div className="flex min-h-0 min-w-0 flex-1 items-start">
       <canvas
         ref={canvasRef}
         className={
           zoomMode === "fit"
             ? // 縮小はするが拡大はしない。h-autoが無いと縦横比が崩れる
-              "h-auto max-h-full w-auto max-w-full object-contain"
+              "mx-auto h-auto max-h-full w-auto max-w-full object-contain"
             : // 等倍。収まらない分はDropZoneのoverflow-autoでスクロールする
-              "max-w-none shrink-0"
+              "mx-auto max-w-none shrink-0"
         }
         hidden={loaded === null}
       />
       {loaded === null && attempt.status !== "parsing" && (
-        <p className="self-center text-sm text-zinc-500">
+        <p className="m-auto text-sm text-zinc-500">
           PSDファイルを選ぶか、ここへドロップする
         </p>
       )}
