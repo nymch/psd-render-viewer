@@ -14,6 +14,9 @@
 
 <!-- Why this change is needed. Link the relevant spec or ADR if there is one -->
 
+<!-- If an issue tracks this, write "Closes #N" so it closes on merge -->
+
+
 ## Approach
 
 <!-- How it was solved. Design decisions the diff cannot show, alternatives considered, and why they were rejected -->
