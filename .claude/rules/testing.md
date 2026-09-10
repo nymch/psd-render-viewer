@@ -8,67 +8,67 @@ paths:
   - "playwright.config.ts"
 ---
 
-# テスト規約
+# Testing conventions
 
-このリポジトリでのテストの書き方をまとめる。言語レベルの規約は[typescript.md](typescript.md)、Reactとレンダリングの規約は[react.md](react.md)を参照。
+How tests are written in this repository. Language-level conventions are in [typescript.md](typescript.md); React and rendering conventions in [react.md](react.md).
 
-## 何をテストするか
+## What gets tested
 
-**`lib/`の純関数とE2Eの2層に絞る。**Reactコンポーネントの単体テストは書かない。
+**Two layers only: pure functions in `lib/`, and E2E.** No unit tests for React components.
 
-| 層 | ツール | 対象 |
+| Layer | Tool | Subject |
 | --- | --- | --- |
-| 単体 | Vitest | `lib/`のデータ変換・計算。PSDのレイヤーツリー構築、座標計算、zodスキーマ |
-| E2E | Playwright | 実ブラウザでの動作。PSDを開いてCanvasに描画されるところまで |
+| Unit | Vitest | Data transforms and calculations in `lib/`: building the PSD layer tree, coordinate math, zod schemas |
+| E2E | Playwright | Behavior in a real browser, through opening a PSD and seeing it drawn on the canvas |
 
-この切り分けは、実際にバグが出た場所に合わせている。開発中に踏んだ罠は次の3つで、いずれもPSDをレイヤーツリーへ変換する純粋なデータ変換だった。
+The split follows where bugs actually appeared. All three traps hit during development were in the pure transform from PSD to layer tree.
 
-- レイヤーの並び順を逆に扱い、背景が全レイヤーを覆った
-- グループの不透明度が子に継承されない（`ag-psd`は継承済みの値を提供しないため自前で掛け合わせる）
-- 表示状態のプロパティを取り違え、全レイヤーが消えた
+- Layer order was handled backwards, so the background covered every layer
+- Group opacity is not inherited by children — `ag-psd` does not hand back an accumulated value, so it has to be multiplied in
+- The visibility property was misread, and every layer disappeared
 
-Canvasの描画はjsdomでは動かず、モックしても実際の描画結果を検証できない。**描画の正しさはE2Eで確かめる。**そのため、描画パラメータの計算（どのレイヤーをどの順で、どの不透明度で描くか）は`lib/`の純関数に切り出し、単体テストの対象にする。Canvasへの書き込み自体はできるだけ薄くする。
+Canvas rendering does not work under jsdom, and mocking it does not verify what is actually drawn. **Rendering correctness is verified by E2E.** So the calculation of rendering parameters — which layer, in what order, at what opacity — is extracted into pure functions in `lib/` and unit tested there. Keep the writes to the canvas itself as thin as possible.
 
-## いつ書くか
+## When to write one
 
-カバレッジ率は追わない。数字を満たすためのテストが増えるだけで、壊れる箇所は減らない。代わりに書くきっかけを決める。
+Coverage percentage is not a target. Chasing a number adds tests without reducing breakage. Use these triggers instead.
 
-- **`lib/`に純関数を追加したとき** — その場で書く
-- **バグを直すとき** — 先にバグを再現するテストを書き、失敗することを確認してから直す。同じ壊れ方を二度させない
+- **A pure function is added to `lib/`** — write the test then and there
+- **A bug is being fixed** — write a test that reproduces it first, confirm it fails, then fix. The same breakage does not get to happen twice
 
-上記以外は任意。UIの調整やスタイルの変更にテストを足さない。
+Everything else is optional. Do not add tests for UI tweaks or style changes.
 
-## 単体テスト（Vitest）
+## Unit tests (Vitest)
 
-- テストファイルは**対象の隣**に置く（`lib/psd.ts`に対して`lib/psd.test.ts`）
-- 1つのテストで1つのことを確かめる。`expect`を並べて複数の関心を混ぜない
-- テスト名は日本語で、**何がどうなるか**を書く（`「グループの不透明度が子に掛け合わされる」`）。`「正しく動く」`のような名前にしない
-- 実データを使う。PSDのフィクスチャは`test/fixtures/`に置き、何を確かめるためのファイルかをコメントかREADMEに残す
+- Put the test file **next to its subject** (`lib/psd.test.ts` for `lib/psd.ts`)
+- One test verifies one thing. Do not line up `expect` calls covering separate concerns
+- Write test names in English, saying **what becomes what** (`"multiplies group opacity into its children"`). Do not write names like `"works correctly"`
+- Use real data. Put PSD fixtures in `test/fixtures/` and record what each file is meant to verify, in a comment or a README
 
-### 設定ファイルの拡張子
+### Config file extension
 
-**`vitest.config.mts`にする。`.ts`にしない。**`.ts`だとCommonJSとして読まれ、ESM構文を使っていることが警告になる。
+**Use `vitest.config.mts`, not `.ts`.** With `.ts` it is read as CommonJS, and the ESM syntax it uses raises a warning.
 
-`tsconfig.json`の`paths`（`@/*`）はVite本体の`resolve.tsconfigPaths`で解決する。`vite-tsconfig-paths`は要らない。
+The `paths` alias (`@/*`) from `tsconfig.json` is resolved by Vite's own `resolve.tsconfigPaths`. `vite-tsconfig-paths` is not needed.
 
-### ag-psdのセットアップ
+### ag-psd setup
 
-**Nodeでは`initializeCanvas`を呼ばないと`readPsd`が例外を投げる。**`useImageData: true`を指定していても内部でcanvasを要求する。`test/setup.ts`でスタブを渡し、`vitest.config.mts`の`setupFiles`で読み込む。
+**Under Node, `readPsd` throws unless `initializeCanvas` is called first.** It asks for a canvas internally even with `useImageData: true`. `test/setup.ts` passes a stub, loaded through `setupFiles` in `vitest.config.mts`.
 
-ブラウザでは初期化は不要なので、このスタブはテスト専用のものとして扱う。
+Browsers need no such initialization, so treat the stub as test-only.
 
-## E2E（Playwright）
+## E2E (Playwright)
 
-- `e2e/`に`*.spec.ts`で置く
-- **Vitestが`e2e/`を拾わないように`vitest.config.mts`で除外する。**Vitestは既定で`.spec.ts`も対象にするため、除外しないとPlaywrightのテストをVitestが実行して失敗する
-- 対象はCanvasの描画と、ファイルを開く操作。**単体テストで確かめられることをE2Eで書かない。**遅く、壊れやすいため
-- 検証はスクリーンショット比較よりも、まず「描画された」「レイヤー数が合っている」といった判定できる事実を見る
+- Files go in `e2e/` as `*.spec.ts`
+- **Exclude `e2e/` in `vitest.config.mts` so Vitest does not pick it up.** Vitest matches `.spec.ts` by default, and without the exclusion it runs the Playwright tests and fails
+- Cover canvas rendering and opening a file. **Do not write an E2E test for something a unit test can verify** — E2E is slow and brittle
+- Prefer decidable facts ("it rendered", "the layer count matches") over screenshot comparison
 
-## 実行
+## Running
 
 ```bash
 npm test          # Vitest
 npm run test:e2e  # Playwright
 ```
 
-PRを出す前に`npm test`を通す。手順は[create-pr](../skills/create-pr/SKILL.md)を参照。
+`npm test` must pass before opening a PR. See [create-pr](../skills/create-pr/SKILL.md) for the procedure.

@@ -1,76 +1,80 @@
 ---
 name: write-adr
-description: 技術的な決定について選択肢とトレードオフを対話で詰め、docs/adr/にADRとして記録する。ライブラリ選定や構造の決定、「どっちにするか決めたい」「この判断を記録しておきたい」といった依頼で使う
+description: Work through the options and trade-offs behind a technical decision and record it in docs/adr/ as an ADR. Use for library choices and structural decisions, or requests like "help me decide between these", "record this decision", or Japanese phrasings such as 「どっちにするか決めたい」「この判断を記録しておきたい」.
 user-invocable: true
 allowed-tools: Read, Write, Glob, Grep, AskUserQuestion, WebSearch, WebFetch, Bash(ls *), Bash(npm view *), Bash(git log *)
 ---
 
 # write-adr
 
-技術的な決定を対話で詰め、[docs/adr/template.md](../../../docs/adr/template.md)に沿ったADRを`docs/adr/`へ書き出す。運用の方針は[docs/adr/README.md](../../../docs/adr/README.md)を参照。
+Work through a technical decision in conversation and write an ADR to `docs/adr/`, following [docs/adr/template.md](../../../docs/adr/template.md). The conventions are in [docs/adr/README.md](../../../docs/adr/README.md).
 
-一人で決めると、**思いついた最初の案が比較されないまま決定になる。**このスキルは選択肢を並べる役をこちらが担い、判断基準を先に決めてから比べる。
+Deciding alone means **the first idea that surfaces becomes the decision, uncompared.** This skill takes on the job of laying out the options, and fixes the criteria before comparing anything.
 
-関連スキル: [write-spec](../write-spec/SKILL.md)（仕様を詰める）、[devils-advocate](../devils-advocate/SKILL.md)（書けたADRに反論する）。
+**Conduct the interview in the user's language.** If they write in Japanese, ask in Japanese; if in English, ask in English. **The ADR file itself is always English**, per [ADR-0005](../../../docs/adr/0005-repository-language.md).
 
-## 対話の原則
+Related skills: [write-spec](../write-spec/SKILL.md) (works out a spec) and [devils-advocate](../devils-advocate/SKILL.md) (argues against a finished ADR).
 
-**1問ずつ聞く。**
+## Interview principles
 
-**事実は自分で調べる。** ライブラリの選定なら、実際に何ができるかを`WebFetch`・`WebSearch`・`npm view`と既存コードで確認する。**Pros／Consを憶測で書かない。**確認できなかった項目は「未確認」と明示する。
+**Ask one question at a time.**
 
-**選択肢を最低3つ用意する。** ユーザーが1つしか持っていなくても、こちらが調べて代替を出す。「やらない・今は決めない」を常に選択肢の1つとして入れる。決めないという判断が正しい場面がある。
+**Look facts up.** For a library choice, confirm what it can actually do using `WebFetch`, `WebSearch`, `npm view`, and the existing code. **Do not write pros and cons from guesswork.** Mark anything unconfirmed as unconfirmed.
 
-**判断基準を先に決める。** 基準なしに選択肢を比べると、その場の印象で決まる。趣味開発でよく効く基準の例:
+**Prepare at least three options.** Even when the user has only one, research an alternative and put it forward. Always include "don't do it / don't decide yet" as one of them — sometimes not deciding is the right call.
 
-- 一人で保守できるか（学習コスト、ドキュメントの厚さ）
-- 後から変えられるか（撤退コスト）
-- 実装が止まらないか（依存の枯れ具合）
-- やりたいことができるか（機能の充足）
+**Fix the criteria first.** Comparing options without criteria means deciding on whatever impression is handy. Criteria that tend to matter on a hobby project:
 
-基準を並べたら、**どれを優先するかをユーザーに決めさせる。**基準の重み付けが決定そのものを決める。
+- Maintainable by one person (learning cost, depth of documentation)
+- Reversible later (cost of backing out)
+- Keeps implementation moving (maturity of the dependency)
+- Actually does the job (feature coverage)
 
-## 手順
+Once the criteria are listed, **make the user rank them.** How the criteria are weighted is what decides the decision.
 
-### 1. 決めることを1文にする
+## Procedure
 
-「何を決めようとしているのか」を1文にする。ぼやけているなら質問で絞る。複数の判断が混ざっていたら分割し、ADRを分ける。
+### 1. State the decision in one sentence
 
-既存の`docs/adr/`を`Glob`で確認し、同じ主題の決定が既にあるかを見る。あれば、それを覆すのか補うのかを確認する。
+Put "what is being decided" into one sentence. If it is blurry, narrow it with questions. If several decisions are mixed together, split them into separate ADRs.
 
-### 2. 背景と課題を聞く
+`Glob` the existing `docs/adr/` to see whether a decision on the same subject already exists. If one does, confirm whether this overturns it or supplements it.
 
-なぜ今決める必要があるのか。決めないと何が困るのか。ここが薄いなら、そもそも決めるのが早すぎる可能性を指摘する。
+### 2. Ask for the background
 
-### 3. 判断基準を決める
+Why does this need deciding now? What goes wrong if it is not decided? If this is thin, point out that it may be too early to decide at all.
 
-基準の候補を提示し、優先順位をユーザーに決めさせる。
+### 3. Fix the criteria
 
-### 4. 選択肢を並べる
+Offer candidate criteria and have the user rank them.
 
-3つ以上を提示する。ユーザーの案 + こちらが調べた代替 + 「やらない」。
+### 4. Lay out the options
 
-各選択肢について、判断基準ごとにどうなるかを調べて示す。調べた出所（ドキュメントのURL、既存コードの`file:line`）を添える。
+Present three or more: the user's, an alternative you researched, and "don't do it".
 
-ここでユーザーが即断しそうなら、**一番弱く見える選択肢の擁護を一度試みる。**一人開発では対抗意見が出ないため、意図的に作る。
+For each option, research and show how it fares against each criterion. Cite where it came from — a documentation URL, or `file:line` in the existing code.
 
-### 5. 決定と結果
+If the user looks ready to decide on the spot, **make one attempt to defend the weakest-looking option.** Solo development produces no opposing view, so produce one deliberately.
 
-どれを選ぶかを決めさせ、**選んだ理由を判断基準に紐づけて**言語化する。「なんとなく良さそう」で終わらせない。
+### 5. Decision and consequences
 
-続けて、この決定で**犠牲になるもの**を必ず聞き出す。良い点しか書かれていないADRは、後から読んだときに判断の材料にならない。
+Have the user choose, and put the reason into words **tied back to the criteria**. Do not settle for "it seems better".
 
-### 6. 書き出し
+Then always draw out **what this decision gives up**. An ADR listing only upsides is useless to whoever reads it later.
 
-1. `docs/adr/`の既存ファイルから最大の連番を調べ、+1する（最初なら`0001`）
-2. [docs/adr/template.md](../../../docs/adr/template.md)を`Read`して埋める
-3. frontmatterの`status`は、実装して確定しているなら`accepted`、これから試すなら`proposed`。`date`は今日の日付
-4. `docs/adr/NNNN-短い英語のタイトル.md`へ`Write`する
+### 6. Write it out
 
-**選ばなかった選択肢とその理由を必ず残す。**ADRの価値の大半はここにある。結論だけならコードを読めばわかる。
+1. Find the highest number among the existing files in `docs/adr/` and add one (`0001` if there are none)
+2. `Read` [docs/adr/template.md](../../../docs/adr/template.md) and fill it in
+3. Set the frontmatter `status` to `accepted` if it is implemented and settled, `proposed` if it is still to be tried. Set `date` to today
+4. `Write` to `docs/adr/NNNN-short-english-title.md`
 
-表記は[.claude/rules/documentation-style.md](../../rules/documentation-style.md)に従う。
+**Always record the options that were not chosen, and why.** Most of an ADR's value is there. The conclusion alone can be read off the code.
 
-### 7. 次の案内
+One decision per file. If two got mixed together, split them.
 
-書き出したパスを伝える。既存のADRを覆す決定だった場合は、元のADRの`status`を`superseded by ADR-NNNN`へ更新することを提案する（**元のADRは削除しない**）。
+Follow [.claude/rules/documentation-style.md](../../rules/documentation-style.md).
+
+### 7. Point to what comes next
+
+Give the path that was written. If the decision overturns an existing ADR, propose updating that one's `status` to `superseded by ADR-NNNN` (**never delete the original**).

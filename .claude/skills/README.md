@@ -1,48 +1,54 @@
 # skills
 
-一人で開発しているため、レビュアー・相談相手にあたる役をスキルで補う。
+This is a solo project, so skills stand in for the reviewer and the person to think out loud at.
 
-## 一覧
+## The skills
 
-| スキル | 何をするか | 成果物 |
+| Skill | What it does | Artifact |
 | --- | --- | --- |
-| [write-spec](write-spec/SKILL.md) | 作りたい機能を1問ずつ詰めて仕様を確定させる | `docs/design/<name>.md` |
-| [write-adr](write-adr/SKILL.md) | 技術的な決定を選択肢とトレードオフから詰める | `docs/adr/NNNN-*.md` |
-| [devils-advocate](devils-advocate/SKILL.md) | 書き上がった文書の前提と設計判断に反論する | 報告のみ |
-| [grilling](grilling/SKILL.md) | 汎用の壁打ち。文書は残さない | なし |
-| [commit](commit/SKILL.md) | 変更を分析してコミットメッセージを組み立てる | コミット |
-| [create-pr](create-pr/SKILL.md) | 差分を自己レビューしPR本文を組み立てる | PR |
+| [write-spec](write-spec/SKILL.md) | Pins down a feature one question at a time | `docs/design/<name>.md` |
+| [write-adr](write-adr/SKILL.md) | Works a technical decision through its options and trade-offs | `docs/adr/NNNN-*.md` |
+| [devils-advocate](devils-advocate/SKILL.md) | Argues against the premises and design decisions in a finished document | A report only |
+| [grilling](grilling/SKILL.md) | General-purpose interrogation, leaves no document | None |
+| [commit](commit/SKILL.md) | Analyzes the changes and builds a commit message | A commit |
+| [create-pr](create-pr/SKILL.md) | Self-reviews the diff and builds the PR body | A PR |
 
-## 使う順番
+## The order they're used in
 
 ```
-考えがまとまっていない
-  └─ /grilling                      … 文書にする前に考えを整理する
+the idea hasn't taken shape
+  └─ /grilling                      … sort out the thinking before writing it down
 
-作るものが決まってきた
-  └─ /write-spec                    … 仕様を詰めて docs/design/ へ
-       └─ /write-adr                … 途中で出た重い技術判断を docs/adr/ へ
-            └─ /devils-advocate     … 書けた文書に反論させる
-                 └─ 実装
-                      └─ /commit          … 変更をコミットする
-                           └─ /create-pr  … 自己レビューしてPRを出す
+what to build is getting clearer
+  └─ /write-spec                    … settle the spec, into docs/design/
+       └─ /write-adr                … split off a heavy technical call, into docs/adr/
+            └─ /devils-advocate     … have the finished document argued against
+                 └─ implement
+                      └─ /commit          … commit the changes
+                           └─ /create-pr  … self-review and open the PR
 ```
 
-`/devils-advocate`は書いた直後より、**少し時間を置いてから**のほうが効く。書いた直後は前提が頭に残っていて、指摘を無意識に退けやすい。
+`/devils-advocate` works better **after some time has passed** than immediately after writing. Right after writing, the premises are still in your head and it's easy to dismiss an objection without noticing.
 
-## 設計の意図
+## Why they're written this way
 
-一人開発で欠けるのは批判役だけではない。各スキルに以下を義務として書いている。
+Solo development is missing more than a critic. Each skill carries these as obligations.
 
-- **選択肢を出す役** — 自分が思いついた案しか俎上に載らない。`/write-spec`と`/write-adr`は、こちらが代替案を必ず用意して並べる
-- **前提を疑う役** — 頭の中にある前提は誰にも疑われない。暗黙の前提を文にして確認する
-- **範囲を止める役** — 個人開発が完成しない最大の原因は範囲の膨張。ゴールを決めたら必ず「やらないこと」を対で決める
-- **決定を記録する役** — 詰めた結果が会話に消えると、後から自分が理由を思い出せない。`/write-spec`と`/write-adr`は必ずファイルに書き出す
+- **Someone to supply options** — otherwise only the ideas you thought of get considered. `/write-spec` and `/write-adr` always research an alternative and put it alongside
+- **Someone to question premises** — a premise held in your head is never challenged. They write implicit premises down and confirm them
+- **Someone to stop the scope** — the main reason a personal project never finishes is scope creep. Every goal gets a paired non-goal
+- **Someone to record decisions** — reasoning that stays in a conversation is gone when you need it. `/write-spec` and `/write-adr` always write a file
 
-## 出典
+## Language
 
-`grilling`はMatt Pocockの公開スキルが原典。description に日本語のトリガー語を追加し、末尾に発話言語へ合わせる指示を1文足した以外は原文のまま。
+The skill instructions are English, and so is everything they write into the repository. **Interactive skills conduct the conversation in whatever language the user writes in**, and each skill's `description` keeps its Japanese trigger phrases so a request in Japanese still invokes it. Both points are recorded in [ADR-0005](../../docs/adr/0005-repository-language.md).
+
+Those Japanese phrases in `description` are matching text, not prose. Removing them stops the skill from firing, silently.
+
+## Attribution
+
+`grilling` comes from Matt Pocock's public skill. It is unchanged apart from Japanese trigger phrases added to its `description` and one appended sentence telling it to follow the user's language.
 
 - [mattpocock/skills — grilling](https://github.com/mattpocock/skills/tree/main/skills/productivity/grilling)
 
-`write-spec`・`write-adr`・`devils-advocate`はこのリポジトリ用に新規作成。
+`write-spec`, `write-adr`, and `devils-advocate` were written for this repository.

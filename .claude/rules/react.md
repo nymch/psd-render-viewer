@@ -9,30 +9,30 @@ paths:
   - "lib/**/*.ts"
 ---
 
-# React／Hooks・Canvas描画規約
+# React, hooks, and Canvas rendering conventions
 
-Reactコンポーネント、hooks、Canvas描画の書き方をまとめる。言語レベルのTypeScript規約は[typescript.md](typescript.md)、文章・コメントの表記は[documentation-style.md](documentation-style.md)を参照。
+How React components, hooks, and Canvas rendering are written here. Language-level TypeScript conventions are in [typescript.md](typescript.md); prose and comment style in [documentation-style.md](documentation-style.md).
 
-このリポジトリは`src/`を持たず、リポジトリ直下に配置する。
+This repository has no `src/`; directories sit at the root.
 
-| ディレクトリ | 置くもの |
+| Directory | Contents |
 | --- | --- |
-| `app/` | ルーティングのみ（`page.tsx`・`layout.tsx`・`route.ts`）。コンポーネントを置かない |
-| `components/` | Reactコンポーネント。機能ごとにサブディレクトリを切る（下記） |
-| `hooks/` | カスタムhook |
-| `atoms/` | Jotaiのatom |
-| `lib/` | fetcher、PSDパース、zodスキーマなど非Reactの処理 |
+| `app/` | Routing only (`page.tsx`, `layout.tsx`, `route.ts`). No components |
+| `components/` | React components, in per-feature subdirectories (below) |
+| `hooks/` | Custom hooks |
+| `atoms/` | Jotai atoms |
+| `lib/` | Non-React code: fetchers, PSD parsing, zod schemas |
 
-## コンポーネントの配置
+## Where components go
 
-コンポーネントは`components/`の下に、**機能ごとのサブディレクトリ**を作って格納する。
+Components live under `components/` in a **subdirectory per feature**.
 
 ```
 components/
-├─ ui/                    ← PSDを知らない汎用部品
+├─ ui/                    ← generic parts that know nothing about PSD
 │  ├─ Button.tsx
 │  └─ Slider.tsx
-├─ layers/                ← 機能
+├─ layers/                ← a feature
 │  ├─ LayerPanel.tsx
 │  └─ LayerRow.tsx
 ├─ viewer/
@@ -41,102 +41,103 @@ components/
    └─ DropZone.tsx
 ```
 
-### 機能ディレクトリ
+### Feature directories
 
-- 粒度は**画面上でまとまった役割を持つ単位**にする（`viewer`・`layers`・`toolbar`・`file-import`）。コンポーネント1つのために1ディレクトリを作らない
-- ディレクトリ名はkebab-case。複数の要素を扱う機能は複数形にする（`layers`）、単一の役割なら単数（`viewer`）
-- ファイル名はPascalCaseで、コンポーネント名と一致させる
+- Size a feature as **a coherent role on screen** (`viewer`, `layers`, `toolbar`, `file-import`). Do not create a directory for a single component
+- Directory names are kebab-case. Plural when the feature handles several of something (`layers`), singular for a single role (`viewer`)
+- File names are PascalCase and match the component name
 
-### `ui/`と機能ディレクトリの使い分け
+### `ui/` versus a feature directory
 
-判定基準は**使われている数ではなく、PSDのドメインを知っているか**。
+The test is **whether it knows about the PSD domain**, not how many places use it.
 
-- **`ui/`** — PSDを知らない汎用部品（ボタン・スライダー・ダイアログ）。どのプロジェクトへ持っていっても成立するもの
-- **機能ディレクトリ** — PSD固有のもの
+- **`ui/`** — generic parts that know nothing about PSD (buttons, sliders, dialogs). Things that would still make sense in another project
+- **Feature directory** — anything PSD-specific
 
-**PSD固有のコンポーネントが複数の機能から使われるようになっても、持ち主の機能に置いたまま他機能からimportする。**「2箇所以上で使うから移動する」という運用にすると、使われる数が変わるたびにファイルが動き、共有ディレクトリが無関係な部品の寄せ集めになる。
+**When a PSD-specific component starts being used by other features, leave it with its owning feature and import it from there.** A "move it once two places use it" policy makes files migrate every time usage changes, and turns the shared directory into a pile of unrelated parts.
 
-### `app/`にコンポーネントを置かない
+### No components in `app/`
 
-`app/`は`page.tsx`・`layout.tsx`・`route.ts`だけにする。ページ専用に見えるコンポーネントも`components/`へ置く。`app/<route>/_components/`のような同居を許すと、「これはページ専用か」の判断が毎回発生し、共有したくなった時点で移動が要る。
+`app/` holds only `page.tsx`, `layout.tsx`, and `route.ts`. Components that look page-specific still go in `components/`. Allowing `app/<route>/_components/` means deciding "is this page-specific?" every time, and moving the file the moment it is shared.
 
-### barrel fileを作らない
+### No barrel files
 
-`index.ts`でのre-exportをしない。ファイルを直接importする。
+Do not re-export through `index.ts`. Import the file directly.
 
 ```typescript
 // Good
 import {LayerPanel} from "@/components/layers/LayerPanel";
 
-// Bad — barrel経由
+// Bad — through a barrel
 import {LayerPanel} from "@/components/layers";
 ```
 
-barrelはツリーシェイキングを妨げ、循環参照の原因になる。ファイルを追加するたびの更新も要る。
+Barrels defeat tree shaking, invite circular imports, and need updating every time a file is added.
 
-1ファイル1コンポーネントを原則とする。そのファイル内でしか使わない小さなサブコンポーネントは同居させてよい。
+One component per file, as a rule. A small subcomponent used only within that file may live alongside it.
 
-### hooksとatomsは機能で割らない
+### Hooks and atoms are not split by feature
 
-`hooks/`と`atoms/`は種類別のまま（`hooks/psdHooks.ts`・`atoms/layers.ts`）。機能で割るのは`components/`だけにする。
+`hooks/` and `atoms/` stay organized by kind (`hooks/psdHooks.ts`, `atoms/layers.ts`). Only `components/` is split by feature.
 
-## コンポーネント
+## Components
 
-- 関数コンポーネントで書く。propsは`type`で定義する。
-- デフォルトはServer Componentとして書く。データ取得はできる限りServer Component側で行う。
-- ブラウザAPIや状態に依存するコンポーネントはファイル先頭に`"use client"`を置く。
-- `"use client"`は状態・イベントハンドラ・ブラウザAPIを直接使う末端コンポーネントに付け、`page`や`layout`から境界を押し下げる。境界を上位に置くほど、サーバーで完結できるレンダリングまでクライアントJSに含まれ、バンドルサイズと初期表示時間が悪化する。
-- `window`／`document`をモジュールのトップレベルで参照するライブラリは`next/dynamic`で読み込む（`ssr: false`）。
-- 画像は`next/image`を使う（`eslint-config-next/core-web-vitals`が要求する）。Canvasに描画するPSDのピクセルデータは対象外。
+- Write function components. Define props with `type`.
+- Default to Server Components. Fetch data on the server side wherever possible.
+- Components that depend on browser APIs or state get `"use client"` at the top of the file.
+- Put `"use client"` on the leaf components that actually use state, event handlers, or browser APIs, pushing the boundary down away from `page` and `layout`. The higher the boundary sits, the more server-renderable markup ends up in the client bundle, hurting bundle size and first paint.
+- Load libraries that touch `window` or `document` at module top level through `next/dynamic` with `ssr: false`.
+- Use `next/image` for images, as `eslint-config-next/core-web-vitals` requires. PSD pixel data drawn to a canvas is not covered by this.
 
 ## Hooks
 
-### 配置と命名
+### Placement and naming
 
-- カスタムhookは`hooks/`にドメイン別のファイル（`psdHooks.ts`・`canvasHooks.ts`等）でまとめる。機能ディレクトリに同居させない。
-- hook名は`use` + リソース（+ 動作）にする（`usePsdDocument`・`useLayerList`）。再利用するロジックはカスタムhookに切り出す。
-- Rules of Hooksを守る。hookはコンポーネントかカスタムhookのトップレベルでのみ呼ぶ。条件分岐・ループ・早期returnの後では呼ばない。`eslint-plugin-react-hooks`の警告を放置しない（`eslint-disable`で抑制しない）。
+- Custom hooks go in `hooks/`, grouped by domain (`psdHooks.ts`, `canvasHooks.ts`). Do not put them in feature directories.
+- Name a hook `use` + resource (+ action): `usePsdDocument`, `useLayerList`. Extract reusable logic into a custom hook.
+- Follow the Rules of Hooks. Call hooks only at the top level of a component or another hook — never after a conditional, a loop, or an early return. Do not leave `eslint-plugin-react-hooks` warnings in place or silence them with `eslint-disable`.
 
 ### useEffect
 
-- `useEffect`は外部システム（DOM・Canvas・タイマー・購読等）との同期にのみ使う。propsやstateから計算できる値を`useState` + `useEffect`で同期しない。レンダー中に計算するか`useMemo`を使う。
-- 購読・イベントリスナー・タイマー・`requestAnimationFrame`・observerなど後始末が要るものはcleanup関数を返す。副作用が通知だけのeffectにはcleanupを書かない。
-- 依存配列は正確に書く。派生値ではなく元の値を依存に入れる。
+- Use `useEffect` only to synchronize with an external system (DOM, canvas, timers, subscriptions). Do not mirror a value derivable from props or state with `useState` + `useEffect`. Compute it during render, or use `useMemo`.
+- Return a cleanup function for anything that needs tearing down: subscriptions, event listeners, timers, `requestAnimationFrame`, observers. An effect that only notifies needs no cleanup.
+- Write the dependency array accurately. Depend on the source value, not something derived from it.
 
-### useCallback／useMemo
+### useCallback and useMemo
 
-- 子へpropsとして渡すハンドラや、再生成を避けたい関数は`useCallback`でメモ化する。
-- レイヤ一覧の整形などの派生値は`useMemo`で計算する。
+- Memoize handlers passed to children, and any function whose identity should be stable, with `useCallback`.
+- Compute derived values such as a formatted layer list with `useMemo`.
 
-## Canvas／PSDレンダリング
+## Canvas and PSD rendering
 
-このプロジェクトの中核。`ag-psd`でPSDをパースし、Canvas 2Dに描画する。選定の経緯は[ADR-0001](../../docs/adr/0001-psd-parser.md)、実APIは[docs/glossary.md](../../docs/glossary.md)を参照。
+The core of this project: parse a PSD with `ag-psd` and draw it with Canvas 2D. The choice of parser is recorded in [ADR-0001](../../docs/adr/0001-psd-parser.md); the library's real behavior is documented in [docs/glossary.md](../../docs/glossary.md).
 
-- `ag-psd`のパースはブラウザAPIに依存するため`"use client"`の内側に閉じ込める。パース処理自体は`lib/`に置き、コンポーネントから切り離す。`readPsd`には`useImageData: true`・`skipCompositeImageData: true`・`skipThumbnail: true`を渡す。
-- 大きいPSDのパースとレイヤ合成はWeb Workerに逃がし、メインスレッドをブロックしない。Worker側で`OffscreenCanvas`に描いて`ImageBitmap`を転送する形にすると、メインスレッドの負荷を抑えられる。
-- Canvas要素は`useRef<HTMLCanvasElement>`で参照し、描画は`useEffect`（外部システムとの同期）で行う。レンダー中に描画しない。
-- 状態が変わるたびに即描画せず、`requestAnimationFrame`で1フレームにまとめる。不透明度スライダーのドラッグのように毎フレーム値が変わる操作では、これがないと描画がキューに積まれて操作が重くなる。cleanupで`cancelAnimationFrame`する。
-- `ImageBitmap`・`ObjectURL`・`OffscreenCanvas`などの資源はcleanupで解放する（`bitmap.close()`・`URL.revokeObjectURL(url)`）。PSDは1枚でも数百MBのピクセルデータになるため、解放漏れがそのままメモリ枯渇につながる。
-- `ImageBitmap`や巨大な`ImageData`をReact stateに入れない。refに置き、stateに置くのは描画パラメータ（表示・不透明度・変形・選択状態）だけにする。ピクセルデータをstateに入れると、値の比較と再レンダーのたびに大きなオブジェクトを引きずることになる。
+- `ag-psd` parsing depends on browser APIs, so keep it inside `"use client"`. Put the parsing itself in `lib/`, separate from components. Pass `useImageData: true`, `skipCompositeImageData: true`, and `skipThumbnail: true` to `readPsd`.
+- Parsing and compositing run in a Web Worker so the main thread is never blocked. See [ADR-0004](../../docs/adr/0004-worker-offloading.md) for the design: a fresh worker per load, terminated on completion, failure, or replacement.
+- **Do not transfer an `ImageBitmap` out of the worker.** In Chrome its backing store is tied to the worker's lifetime, so terminating the worker empties a bitmap that was already transferred — the receiver gets correct dimensions and no pixels. Transfer an RGBA `ArrayBuffer` and `putImageData` it on the main thread. `transferControlToOffscreen` is also unusable here, since a canvas element can only be transferred once and the worker is disposable.
+- Reference the canvas element through `useRef<HTMLCanvasElement>` and draw inside `useEffect`, as synchronization with an external system. Never draw during render.
+- Do not redraw on every state change. Coalesce into one frame with `requestAnimationFrame`, and `cancelAnimationFrame` in cleanup. Without this, dragging something like an opacity slider queues a draw per change and the interaction goes sluggish.
+- Release resources in cleanup: `bitmap.close()`, `URL.revokeObjectURL(url)`, and anything holding an `OffscreenCanvas`. A single PSD can hold hundreds of megabytes of pixel data, so a leak turns straight into memory exhaustion.
+- Do not put an `ImageBitmap` or a large `ImageData` in React state. Keep them in a ref, and let state hold only rendering parameters — visibility, opacity, transform, selection. Pixel data in state means dragging a huge object through every comparison and re-render.
 
-## データ取得（SWR）
+## Data fetching (SWR)
 
-- クライアントでのデータ取得はSWRに一本化する。`useState`と`useEffect`でfetchを自前実装しない。
-- fetcherは`lib/`に定義し、hookから使う。レスポンスはzodスキーマで検証し、型は`z.infer`で導出する。
-- fetcherは非2xxレスポンスでthrowする。throwしないとSWRの`error`に乗らない。
-- SWRのキャッシュキーは、パラメータを含む複合キーなら配列（`["psd", fileId]`）、パラメータのない固定リソースなら文字列（`"document-list"`）にする。文字列連結（`` `psd-${fileId}` ``）は区切り文字がidに含まれるとキーが衝突しうるため使わない。
-- **キーの一意性に特に注意する**。同じキーを別々のデータ取得で使うとキャッシュが衝突し、片方のデータがもう片方に混ざる・意図しない再検証が起きるなどの不具合になる。リソースを区別する値（id・パラメータ）はすべてキーに含める。
-- 書き込み（mutation）は`useSWRMutation`でラップし、`trigger`・`isMutating`・`error`を使う。ローディングやエラー状態を`useState`で自前管理しない。対応するGETと同一キーなら成功時に自動再検証され、キーが異なる場合は`onSuccess`等で対応する`mutate`を呼ぶ。
+- Client-side fetching goes through SWR. Do not hand-roll it with `useState` and `useEffect`.
+- Define fetchers in `lib/` and use them from hooks. Validate responses with a zod schema and derive the type with `z.infer`.
+- Fetchers throw on non-2xx responses. Without a throw, SWR's `error` never populates.
+- Use an array for a compound cache key that includes parameters (`["psd", fileId]`), and a string for a fixed resource with none (`"document-list"`). Do not build keys by concatenation (`` `psd-${fileId}` ``) — the separator can appear inside an id and collide.
+- **Watch key uniqueness especially closely.** Reusing a key across different fetches makes caches collide, mixing one response into the other and triggering unintended revalidation. Every value that distinguishes a resource belongs in the key.
+- Wrap writes in `useSWRMutation` and use `trigger`, `isMutating`, and `error`. Do not track loading and error state by hand with `useState`. A mutation sharing its key with the corresponding GET revalidates automatically; otherwise call the matching `mutate` from `onSuccess`.
 
-## グローバル状態（Jotai）
+## Global state (Jotai)
 
-- グローバル状態はJotaiを使う。atomは`atoms/`にドメイン別のファイル（`layers.ts`・`viewport.ts`）で定義する。
-- 読み取りだけなら`useAtomValue`、書き込みだけなら`useSetAtom`、両方使うなら`useAtom`。書き込みしかしないコンポーネントで`useAtom`を使うと、値の更新のたびに不要な再レンダーが起きる。
-- レイヤの表示・不透明度・並び順のようにレイヤ単位で変わる状態は`atomFamily`でレイヤごとのatomに分ける。1枚のスライダーを動かしたときに、そのレイヤのコントロールだけが再レンダーされる。
-- 他のatomから計算できる値は派生atomにする。同じ値を複数のatomに持たない。
+- Global state uses Jotai. Define atoms in `atoms/`, split by domain (`layers.ts`, `viewport.ts`).
+- Use `useAtomValue` to read, `useSetAtom` to write, `useAtom` for both. A write-only component using `useAtom` re-renders needlessly on every update.
+- Split per-layer state — visibility, opacity, ordering — into per-layer atoms with `atomFamily`. Moving one slider then re-renders only that layer's controls.
+- Make values computable from other atoms derived atoms. Do not store the same value in two places.
 
-## フォーム（React Hook Form）
+## Forms (React Hook Form)
 
-- React Hook Formは**submitのあるフォーム**に使う（書き出し設定ダイアログ、レイヤのリネーム、ファイル読み込みフォーム等）。`zodResolver`と組み合わせ、スキーマは`lib/schemas/`から取る。
-- ネストした子には`FormProvider`と`useFormContext`で配る。配列フィールドは`useFieldArray`を使う。
-- **レイヤの表示切替・不透明度・並び替えのような即時反映の操作UIにReact Hook Formを使わない。** これらの状態はCanvasの描画に直結する。RHFに持たせるとフォーム状態と描画状態の二重持ちになり、`useWatch`で全変更を拾って同期する処理が要る。これは「stateから計算できる値を`useEffect`で同期しない」に反する。これらはJotaiのatomに置く。
+- Use React Hook Form for **forms with a submit**: an export settings dialog, renaming a layer, a file-loading form. Combine it with `zodResolver`, taking schemas from `lib/schemas/`.
+- Distribute context to nested children with `FormProvider` and `useFormContext`. Use `useFieldArray` for array fields.
+- **Do not use React Hook Form for immediate-effect controls such as toggling layer visibility, opacity, or reordering.** That state feeds canvas rendering directly. Holding it in RHF duplicates it across form state and render state, and requires a `useWatch` to catch every change and sync it — which is exactly the "do not mirror derivable state with `useEffect`" problem. Put this state in Jotai atoms.

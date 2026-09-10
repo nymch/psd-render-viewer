@@ -1,6 +1,6 @@
 ---
 name: devils-advocate
-description: 書き上がった仕様書やADRの前提と設計判断に反論する。「この仕様の穴を探して」「反論して」「見落としがないか確認して」といった依頼で使う。報告のみで修正はしない
+description: Argue against the premises and design decisions in a finished spec or ADR. Use for requests like "find the holes in this spec", "argue against this", "check what I missed", or Japanese phrasings such as 「この仕様の穴を探して」「反論して」「見落としがないか確認して」. Reports only, never edits.
 user-invocable: true
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep, AskUserQuestion, WebSearch, WebFetch, Bash(ls *), Bash(git diff *), Bash(git status *)
@@ -8,79 +8,81 @@ allowed-tools: Read, Glob, Grep, AskUserQuestion, WebSearch, WebFetch, Bash(ls *
 
 # devils-advocate
 
-書き上がった文書（仕様書・ADR）の**前提と設計判断**に反論する。
+Argue against the **premises and design decisions** in a finished document (a spec or an ADR).
 
-一人開発では、書いた本人が唯一の読み手になる。書いた直後は前提が頭に残っているため穴が見えない。**このスキルは、その前提を共有していない読み手として振る舞う。**
+In solo development the person who wrote the document is its only reader. Right after writing, the premises are still in their head, so the holes are invisible. **This skill acts as a reader who does not share those premises.**
 
-**報告だけを行う。修正はしない。**どの反論を採るかはユーザーが決める。
+**Report only. Do not edit.** Which objections to act on is the user's call.
 
-関連スキル: [write-spec](../write-spec/SKILL.md)・[write-adr](../write-adr/SKILL.md)（文書を作る側）。まだ形になっていない考えを詰めるなら[grilling](../grilling/SKILL.md)。
+**Report in the user's language** — if they write in Japanese, report in Japanese. The report is conversation, not a committed artifact, so it is not bound by the English rule in [ADR-0005](../../../docs/adr/0005-repository-language.md).
 
-## 手順
+Related skills: [write-spec](../write-spec/SKILL.md) and [write-adr](../write-adr/SKILL.md) produce the documents. For an idea that has not taken shape yet, use [grilling](../grilling/SKILL.md).
 
-### 1. 対象の特定
+## Procedure
 
-引数でパスが渡されていればそれを対象にする。無ければ`docs/design/`と`docs/adr/`を`Glob`で一覧し、`AskUserQuestion`で選ばせる。対象が1件しかなければ確認せずそれを使う。
+### 1. Identify the target
 
-対象ファイルを`Read`で**全文**読む。差分ではなく文書全体を見る。
+If a path was passed as an argument, use it. Otherwise `Glob` `docs/design/` and `docs/adr/` and let the user pick with `AskUserQuestion`. If there is only one candidate, use it without asking.
 
-あわせて、判断の前提になる周辺を読む: [docs/glossary.md](../../../docs/glossary.md)、関連する既存ADR、対象が触れている実装。
+`Read` the target **in full**. Look at the whole document, not a diff.
 
-### 2. 視点を順に適用する
+Also read what the reasoning rests on: [docs/glossary.md](../../../docs/glossary.md), any related existing ADR, and the implementation the document refers to.
 
-本体が視点を順に適用する。サブエージェントは使わない（趣味開発でトークンを浪費しないため）。ユーザーが明示的に並列実行を求めた場合のみ`Agent`の使用を提案する。
+### 2. Apply each viewpoint in turn
 
-**仕様書に対する視点:**
+Apply the viewpoints yourself, in sequence. Do not spawn subagents — this is a hobby project and the tokens are not worth it. Only if the user explicitly asks for parallel execution, offer to use `Agent`.
 
-- **必要性** — 作らない選択肢と比べて何が得られるか。既存の機能で足りていないか。解こうとしている問題は実在するか
-- **範囲** — 「やらないこと」が実際に守れる線引きか。ゴールの中に、やらないことへ移すべき要求が紛れていないか
-- **完成可能性** — この範囲を一人で終えられるか。手が止まりそうな箇所はどこか。分割すべきか。**これは個人開発に固有の視点で、他のレビューでは出てこない**
-- **破綻** — 大きなPSD、レイヤー数、非対応のレイヤー種別、メモリ。何が最初に壊れるか
-- **前提** — 根拠を示せない断定が混ざっていないか。「たぶん動く」で済ませている箇所はどこか
-- **異常系の欠落** — 失敗したときの記述があるか。何を表示して何を諦めるかが決まっているか
+**Viewpoints for a spec:**
 
-**ADRに対する視点:**
+- **Necessity** — what does this gain over not building it? Is an existing feature already enough? Is the problem real?
+- **Scope** — is the "out of scope" line one that will actually hold? Is anything in the goals that belongs on the other side of it?
+- **Finishability** — can one person finish this scope? Where is progress likely to stall? Should it be split? **This viewpoint is specific to solo development and does not come up in ordinary review**
+- **Breaking point** — large PSDs, layer counts, unsupported layer types, memory. What breaks first?
+- **Premises** — are there assertions with nothing behind them? Where does it rely on "it'll probably work"?
+- **Missing failure cases** — is failure described at all? Is it settled what gets shown and what gets given up on?
 
-- **選択肢の網羅性** — 検討されていない選択肢はないか。特に「やらない」「後で決める」が検討されているか
-- **判断基準** — 基準は決定より先に決まっているか。結論に合わせて基準が選ばれていないか
-- **撤退可能性** — 後から変えられるか。変えるとしたら何を書き直すことになるか。撤退コストが結果に書かれているか
-- **前提の寿命** — この判断の前提はいつ崩れるか。ライブラリの更新・要件の変化で嘘になる部分はどこか
-- **結果の非対称性** — 良い点だけが書かれていないか。犠牲になるものが具体的に書かれているか
+**Viewpoints for an ADR:**
 
-### 3. 選別
+- **Coverage of options** — is an option missing? In particular, were "don't do it" and "decide later" considered?
+- **Criteria** — were the criteria fixed before the decision, or picked to fit the conclusion?
+- **Reversibility** — can this be changed later? What would have to be rewritten? Is the cost of backing out in the consequences?
+- **Lifespan of the premises** — when do the premises behind this decision expire? What becomes false on a library update or a change in requirements?
+- **Asymmetry of consequences** — are only the upsides written down? Is what gets sacrificed stated concretely?
 
-出た反論から以下を落とす:
+### 3. Filter
 
-- **根拠を示せないもの。** 対象文書の該当記述、`file:line`、調べた出所のいずれかを示せない反論は捨てる
-- **成立条件を書けないもの。** 「どういう場合にこの反論が当たるのか」を書けない指摘は捨てる
-- **件数を埋めるための弱い反論。** 0件なら0件と報告する
+Drop these from what the viewpoints produced:
 
-誤字・表記ゆれ・実装の細部は対象外。ここで見るのは前提と設計判断だけ。
+- **Anything without support.** If an objection cannot point to a passage in the document, a `file:line`, or a source that was checked, discard it
+- **Anything with no stated trigger condition.** If "under what circumstances does this objection apply" cannot be written, discard it
+- **Weak objections included to fill a quota.** If the count is zero, report zero
 
-### 4. 報告
+Typos, inconsistent wording, and implementation details are out of scope. This looks only at premises and design decisions.
+
+### 4. Report
 
 ```text
-## 対象
-<ファイルパス> — <文書の主張の要点>
+## Target
+<file path> — <the document's central claim>
 
-## 要判断
-- <反論> — 根拠: <該当記述・file:line> / 成立条件: <条件>
+## Needs a decision
+- <objection> — support: <passage or file:line> / applies when: <condition>
 
-## 要確認
-- <反論> — 根拠: <...> / 成立条件: <...> / 確認方法: <調べ方>
+## Needs checking
+- <objection> — support: <...> / applies when: <...> / how to check: <method>
 
-## 記録
-- <反論> — 根拠: <...> / 成立条件: <...>
+## Worth recording
+- <objection> — support: <...> / applies when: <...>
 ```
 
-分類の定義:
+What the categories mean:
 
-- **要判断** — 採用すると仕様・設計・範囲が変わる。実装前に結論を出すべきもの
-- **要確認** — 調べれば白黒つくもの（ライブラリの対応状況、実データの規模など）
-- **記録** — 反論としては成立するが現状維持も妥当。文書の「未解決の論点」や「補足」に残す価値があるもの
+- **Needs a decision** — acting on it changes the spec, the design, or the scope. Settle it before implementing
+- **Needs checking** — a question that research can settle: whether a library supports something, how large real data is
+- **Worth recording** — a valid objection where keeping things as they are is also defensible. Belongs in the document's open questions or notes
 
-該当のない分類は「該当なし」と書く。3分類とも0件なら、根拠のある反論が立たなかった旨を明示する。
+Write "none" for a category with no entries. If all three are empty, say plainly that no supported objection could be made.
 
-出力の文体は[.claude/rules/documentation-style.md](../../rules/documentation-style.md)に従う。
+Follow [.claude/rules/documentation-style.md](../../rules/documentation-style.md) for the writing itself.
 
-報告後は終了する。**修正は行わない。**ユーザーが特定の反論への対応を求めたら、そこで初めて対応する。
+Stop after reporting. **Do not edit.** Act only if the user asks for a specific objection to be addressed.

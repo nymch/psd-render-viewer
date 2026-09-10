@@ -1,84 +1,86 @@
 ---
 name: write-spec
-description: 作りたい機能について1問ずつ深掘りして仕様を確定させ、docs/design/に仕様書として書き出す。実装を始める前の要件整理、「何を作るか決めたい」「仕様を固めたい」「仕様書を書いて」といった依頼で使う
+description: Pin down a feature one question at a time and write the result to docs/design/ as a spec. Use for sorting out requirements before implementation, or requests like "let's decide what to build", "write the spec", or Japanese phrasings such as 「何を作るか決めたい」「仕様を固めたい」「仕様書を書いて」.
 user-invocable: true
 allowed-tools: Read, Write, Glob, Grep, AskUserQuestion, WebSearch, WebFetch, Bash(ls *), Bash(git log *)
 ---
 
 # write-spec
 
-作りたい機能について対話で仕様を詰め、[docs/design/template.md](../../../docs/design/template.md)に沿った仕様書を`docs/design/`へ書き出す。
+Work through a feature in conversation and write a spec to `docs/design/`, following [docs/design/template.md](../../../docs/design/template.md).
 
-このリポジトリは一人で開発している。頭の中にある仕様は誰にも疑われないまま実装に入り、途中で前提が崩れる。**このスキルの役目は、レビュアーがいない状態を対話で埋めること。**
+This repository is developed by one person. A spec that lives only in someone's head goes into implementation unchallenged, and its premises collapse partway through. **This skill exists to fill in, through conversation, what a reviewer would have caught.**
 
-関連スキル:
+**Conduct the interview in the user's language.** If they write in Japanese, ask in Japanese; if in English, ask in English. **The spec file itself is always English**, per [ADR-0005](../../../docs/adr/0005-repository-language.md).
 
-- [write-adr](../write-adr/SKILL.md) — 技術的な決定そのものを詰めて記録する。仕様を詰める過程で重い技術判断が出たらそちらへ切り出す
-- [devils-advocate](../devils-advocate/SKILL.md) — 書き上がった仕様書に反論する
-- [grilling](../grilling/SKILL.md) — 文書を残さない汎用の壁打ち
+Related skills:
 
-## 対話の原則
+- [write-adr](../write-adr/SKILL.md) — pins down and records a technical decision itself. If a heavy technical call comes up while working out the spec, split it off there
+- [devils-advocate](../devils-advocate/SKILL.md) — argues against a finished spec
+- [grilling](../grilling/SKILL.md) — general-purpose interrogation that leaves no document
 
-**1問ずつ聞く。** まとめて聞かない。前の答えで次の質問が変わるため、先回りして質問を並べない。
+## Interview principles
 
-**事実は自分で調べる。決定だけをユーザーに問う。** 調べればわかることを聞かない。先に読むもの:
+**Ask one question at a time.** Do not batch them. The next question depends on the last answer, so do not queue them up in advance.
 
-- [docs/glossary.md](../../../docs/glossary.md) — 用語と識別子。仕様書はこの表記で書く
-- [.claude/rules/react.md](../../rules/react.md) — 状態の置き場所（Jotai・ref・Server Component）の方針
-- 既存の`docs/design/`と`docs/adr/` — 過去に決めたことと矛盾していないか
-- ライブラリのドキュメント — `ag-psd`が何を読めるか等。**PSDの仕様やライブラリの対応状況を憶測で断定しない。**わからなければ調べ、調べてもわからなければ「未解決の論点」に落とす
+**Look facts up; ask the user only for decisions.** Do not ask what can be found. Read first:
 
-**各質問に推奨案を添える。** ユーザーは判断だけすればよい状態にする。
+- [docs/glossary.md](../../../docs/glossary.md) — terms and identifiers. The spec uses this wording
+- [.claude/rules/react.md](../../rules/react.md) — where state belongs (Jotai, refs, Server Components)
+- Existing `docs/design/` and `docs/adr/` — check nothing contradicts an earlier decision
+- Library documentation — what `ag-psd` can actually read, and so on. **Do not assert anything about the PSD format or a library's support from guesswork.** Look it up; if it stays unclear, put it under open questions
 
-### 相談相手がいない前提での補い方
+**Attach a recommendation to every question.** Leave the user with nothing to do but decide.
 
-一人開発で欠けるのは批判役だけではない。以下を明示的に担う。
+### Covering for the absent second opinion
 
-- **選択肢はこちらが出す。** ユーザーが挙げた案だけを検討しない。どの分岐でも代替案を最低1つ自分で用意して並べる。一人だと思いついた最初の案がそのまま決定になる
-- **暗黙の前提を言語化して確認する。** ユーザーが自明として飛ばした前提（「PSDはローカルから読む」「レイヤー数はせいぜい数十」等）を、こちらが文にして確認する
-- **やらないことを必ず決めさせる。** 個人開発が完成しない最大の原因は範囲の膨張。ゴールを聞いたら必ず「やらないこと」を対で聞く
-- **同意しない。** ユーザーの案に問題が見えたら、その場で指摘してから次へ進む。合意を急がない
+Solo development is missing more than a critic. Take on these explicitly.
 
-## 手順
+- **Supply the options yourself.** Do not evaluate only what the user proposed. At every branch, put at least one alternative of your own alongside it. Alone, the first idea that surfaces becomes the decision
+- **Say the implicit premises out loud and confirm them.** Premises the user skipped as obvious ("the PSD is read from local disk", "there will be at most a few dozen layers") get written down and checked
+- **Always make them decide what is out of scope.** The main reason a personal project never finishes is scope creep. Every time you ask about a goal, ask about its non-goals in the same breath
+- **Do not agree by default.** If a proposal looks flawed, say so before moving on. Do not rush to consensus
 
-### 1. 対象の確認
+## Procedure
 
-何について仕様を書くのかを1文で確認する。既に`docs/design/`に同じ主題のファイルがあれば、新規作成ではなく更新かどうかを確認する。
+### 1. Confirm the subject
 
-### 2. 決定木を1問ずつ辿る
+Confirm in one sentence what the spec is about. If `docs/design/` already has a file on the same subject, check whether this is an update rather than a new file.
 
-以下の順に深さ優先で進む。1つの枝を掘り切ってから次へ移る。各段階で答えが曖昧なら、具体例を出して絞る。
+### 2. Walk the decision tree, one question at a time
 
-1. **何を作るか** — 1〜2文で言えるか。言えないなら範囲が広すぎる。分割を提案する
-2. **なぜ要るか** — 今どう困っているか。「あると便利」で止まるなら、それが最優先かを問う
-3. **完成の定義** — 何ができたら終わりか。動作で答えさせる（「レイヤーが見える」ではなく「サンプルPSDを開くと全レイヤーが正しい重ね順で表示される」）
-4. **やらないこと** — 今回やらないと明示する範囲。ここを飛ばさない
-5. **操作と画面** — ユーザーが何をすると何が起きるか
-6. **扱うデータ** — PSDのどの情報を読むか、アプリがどの状態を保持するか、それをどこに置くか（`atoms/`・ref・Server Component）
-7. **異常系** — 読めないファイル、非対応のレイヤー種別、サイズ超過。何を表示して何を諦めるか。**ここは必ず聞く。**一人開発で最も飛ばされやすく、後で最も手戻りする
-8. **技術設計** — どう実装するか。重い判断（ライブラリ選定、Worker分離、データの持ち方）が出たらADRへ切り出す旨をその場で伝える
-9. **未解決の論点** — 決めきれないものを明示的に残す。無理に決めない
-10. **確認方法** — 完成をどう確かめるか。試すPSDファイルと見るべき結果
+Go depth-first in this order, finishing a branch before moving on. If an answer stays vague, offer concrete examples to narrow it.
 
-### 3. 合意の確認
+1. **What is being built** — can it be said in one or two sentences? If not, the scope is too wide. Propose splitting it
+2. **Why it is needed** — what is the current problem? If the answer stops at "it would be nice", ask whether it is really the top priority
+3. **Definition of done** — what has to work for this to be finished? Get the answer as behavior ("opening the sample PSD shows every layer in the right stacking order", not "layers are visible")
+4. **Out of scope** — what is explicitly not being done. Do not skip this
+5. **Interaction and screen** — what the user does, and what happens
+6. **Data** — which parts of the PSD get read, what state the app holds, and where it lives (`atoms/`, a ref, a Server Component)
+7. **Failure cases** — unreadable files, unsupported layer types, size limits. What gets shown, and what gets given up on. **Always ask this.** It is the most commonly skipped question in solo development, and the most expensive one to answer late
+8. **Technical design** — how it gets implemented. When a heavy call comes up (library choice, moving work to a worker, how data is held), say on the spot that it should be split into an ADR
+9. **Open questions** — leave what cannot be settled explicitly unsettled. Do not force a decision
+10. **How to verify** — how completion gets checked: which PSD to try, and what to look for
 
-決まったことを要約して提示し、認識が合っているかを確認する。ここでユーザーが修正したら該当の枝へ戻る。
+### 3. Confirm agreement
 
-ユーザーが「もういい」「十分」等で打ち切ったら、そこまでの内容で書き出す。埋まっていない節は「未解決の論点」へ移す。
+Summarize what was decided and check it matches. If the user corrects something here, go back to that branch.
 
-### 4. 書き出し
+If the user cuts it short ("that's enough"), write up what exists so far. Move unfilled sections into open questions.
 
-1. [docs/design/template.md](../../../docs/design/template.md)を`Read`する
-2. 各節を埋める。**埋まらない節は削る。**プレースホルダのまま残さない
-3. 先頭のHTMLコメント（テンプレートの説明）は消す
-4. `docs/design/<kebab-case-の英語タイトル>.md`へ`Write`する
+### 4. Write it out
 
-表記は[.claude/rules/documentation-style.md](../../rules/documentation-style.md)に従い、用語は[docs/glossary.md](../../../docs/glossary.md)の表記を使う。決めていないことを断定して書かない。
+1. `Read` [docs/design/template.md](../../../docs/design/template.md)
+2. Fill in each section. **Delete sections that cannot be filled.** Do not leave placeholders
+3. Remove the HTML comment at the top, which explains the template
+4. `Write` to `docs/design/<kebab-case-english-title>.md`
 
-### 5. 次の案内
+Follow [.claude/rules/documentation-style.md](../../rules/documentation-style.md), and use the wording from [docs/glossary.md](../../../docs/glossary.md). Do not state anything as settled that was not.
 
-書き出したパスを伝え、必要に応じて案内する:
+### 5. Point to what comes next
 
-- 技術判断を切り出すべきものがあれば`/write-adr`
-- 仕様に反論が欲しければ`/devils-advocate`
-- 用語集にない語を新しく使ったなら`docs/glossary.md`への追加
+Give the path that was written, and suggest as appropriate:
+
+- `/write-adr` if a technical decision should be split out
+- `/devils-advocate` to have the spec argued against
+- Adding to `docs/glossary.md` if a new term was introduced that is not in it

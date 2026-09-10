@@ -5,51 +5,51 @@ paths:
   - "**/*.mts"
 ---
 
-# TypeScriptコーディング規約
+# TypeScript conventions
 
-このリポジトリで`.ts`／`.tsx`を書くときの規約をまとめる。Reactコンポーネントとhooks、Canvas描画は[react.md](react.md)、文章・コメントの表記は[documentation-style.md](documentation-style.md)を参照。
+Conventions for writing `.ts` / `.tsx` in this repository. React components and hooks and Canvas rendering are covered in [react.md](react.md); prose and comment style in [documentation-style.md](documentation-style.md).
 
-## 型の厳格さ
+## Strictness
 
-- 型検査の基準はルートの`tsconfig.json`で、`strict`を有効にしている。設定を緩める方向の変更はしない。
-- 配列やオブジェクトのインデックスアクセスは結果が`undefined`になりうる前提で書く。取り出した値は存在チェックか絞り込みをしてから使う。PSDのレイヤ配列のようにインデックスで引く場面が多いので特に注意する。
-- `any`を使わない。値の型が不明なときは`unknown`で受けてから絞り込む。
-- 型アサーション（`as`）は最小限にする。安全に絞り込めるならそちらを優先する。
-- `@ts-ignore`は使わない。型エラーを意図的に無視する必要がある場合は`@ts-expect-error`を理由コメント付きで使う。`@ts-expect-error`は対象の型エラーが解消された時点で自身がエラーになるため、不要になった抑制に気づける。
+- Type checking is governed by the root `tsconfig.json`, which enables `strict`. Do not loosen it.
+- Treat indexed access on arrays and objects as possibly `undefined`. Check for existence or narrow before using the value. PSD layer arrays get indexed often, so this comes up a lot.
+- Do not use `any`. Receive values of unknown shape as `unknown` and narrow.
+- Keep type assertions (`as`) to a minimum. Prefer narrowing when it is safe.
+- Do not use `@ts-ignore`. When a type error must be suppressed deliberately, use `@ts-expect-error` with a comment giving the reason. `@ts-expect-error` becomes an error itself once the underlying problem is fixed, so stale suppressions surface.
 
-## 型定義
+## Type definitions
 
-- 基本は`type`を使う。宣言のマージが必要な場合など、`interface`が明確に適する場面だけ`interface`を使う。
-- `enum`は使わない。`type BlendMode = "normal" | "multiply"`のようなunion of literals、または`as const`オブジェクトから`type Status = (typeof STATUS)[keyof typeof STATUS]`の形で値のunionを導出する。
-- 状態をunionで表現し`switch`で分岐する場合は、`default`節で`value satisfies never`のような網羅性チェックを入れる。状態を追加したときの分岐の更新漏れをコンパイル時に検出できる。`const _exhaustive: never = value`の形は未使用変数のlint警告になるため使わない。
-- zodスキーマがある値は`z.infer<typeof schema>`で型を導出し、型定義を二重に持たない。外部から来る値（APIレスポンス、ファイルから読んだメタデータ、`localStorage`の中身）はスキーマで検証してから使う。
+- Default to `type`. Use `interface` only where it clearly fits, such as when declaration merging is needed.
+- Do not use `enum`. Use a union of literals (`type BlendMode = "normal" | "multiply"`), or derive one from an `as const` object with `type Status = (typeof STATUS)[keyof typeof STATUS]`.
+- When a union models state and a `switch` branches on it, add an exhaustiveness check in the `default` branch: `value satisfies never`. Adding a state then fails to compile until every branch is updated. Do not use `const _exhaustive: never = value` — it trips the unused-variable lint rule.
+- Where a zod schema exists, derive the type with `z.infer<typeof schema>` rather than maintaining a second definition. Validate anything arriving from outside — API responses, metadata read from a file, `localStorage` contents — through a schema before use.
 
-## import
+## Imports
 
-- 型だけを取り込むimportは`import type`を使い、値のimportと分ける。ESLintでは強制していないためレビューで確認する。
-- リポジトリ内の参照はパスエイリアス`@/*`（`tsconfig.json`の`paths`で定義済み）を使う。`../../`と親を遡る相対パスを書かない。
+- Use `import type` for type-only imports, separate from value imports. ESLint does not enforce this, so it is a review item.
+- Reference files inside the repository through the `@/*` path alias, defined in `tsconfig.json` under `paths`. Do not write relative paths that climb with `../../`.
 
-## 命名
+## Naming
 
-| 対象 | 記法 | 例 |
+| Subject | Style | Example |
 | --- | --- | --- |
-| 変数・関数 | `camelCase` | `layerCount`・`parsePsd` |
-| 型・Reactコンポーネント | `PascalCase` | `LayerNode`・`LayerPanel` |
-| 定数オブジェクト・環境変数 | `SCREAMING_CASE` | `BLEND_MODE`・`NEXT_PUBLIC_API_URL` |
+| Variables and functions | `camelCase` | `layerCount`, `parsePsd` |
+| Types and React components | `PascalCase` | `LayerNode`, `LayerPanel` |
+| Constant objects and env vars | `SCREAMING_CASE` | `BLEND_MODE`, `NEXT_PUBLIC_API_URL` |
 
-### 関数
+### Functions
 
-- 関数は`camelCase`で、動詞から始める（`parsePsd`・`renderLayer`・`fetchDocument`等）。
-- 真偽値を返す関数・変数は`is`／`has`／`can`などの接頭辞を付ける（`isVisible`・`hasAlpha`・`canRender`）。
-- React hookは`use`から始める（`usePsdDocument`）。
-- イベントハンドラは`handle`を接頭辞にし、それを受け取るpropsは`on`を接頭辞にする（`handleOpacityChange`を`onOpacityChange`に渡す）。
+- Name functions in `camelCase`, starting with a verb (`parsePsd`, `renderLayer`, `fetchDocument`).
+- Prefix functions and variables that hold booleans with `is` / `has` / `can` (`isVisible`, `hasAlpha`, `canRender`).
+- Start React hooks with `use` (`usePsdDocument`).
+- Prefix event handlers with `handle` and the props that receive them with `on` (pass `handleOpacityChange` to `onOpacityChange`).
 
 ## Lint
 
-- Prettierは導入していない。整形を目的にした大きな差分を作らず、周囲のコードのスタイルに合わせる。
-- Lintは`npm run lint`（`eslint.config.mjs`の`eslint-config-next/core-web-vitals`と`eslint-config-next/typescript`）を通す。警告を`eslint-disable`で消すのではなく、原因を直す。
+- Prettier is not installed. Do not produce large formatting-only diffs; match the surrounding style.
+- Code must pass `npm run lint` (`eslint.config.mjs`, using `eslint-config-next/core-web-vitals` and `eslint-config-next/typescript`). Fix the cause rather than silencing a warning with `eslint-disable`.
 
-## コメント
+## Comments
 
-- コメントの文章は[documentation-style.md](documentation-style.md)に従う。日本語・常体で書き、識別子やAPI名は原文（英語）のままでよい。
-- 何をしているかではなく、なぜそうしているかを書く。コードを読めばわかることは書かない。
+- Comment prose follows [documentation-style.md](documentation-style.md). Write comments in English.
+- Say why, not what. Do not restate what the code already shows.

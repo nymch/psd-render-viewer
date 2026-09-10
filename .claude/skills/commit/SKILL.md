@@ -1,21 +1,23 @@
 ---
 name: commit
-description: 変更内容を分析してコミットメッセージ候補を提示し、確認のうえコミットする。「コミットして」「commitして」といった依頼で使う
+description: Analyze the staged changes, propose commit message candidates, and commit once confirmed. Use for requests like "commit this", or Japanese phrasings such as 「コミットして」「commitして」.
 user-invocable: true
 allowed-tools: Bash(git *), AskUserQuestion, Read, Grep
 ---
 
 # commit
 
-変更を分析し、[.claude/rules/documentation-style.md](../../rules/documentation-style.md)のコミットメッセージ規約に沿った候補を提示してコミットする。
+Analyze the changes and propose a message following the commit convention in [.claude/rules/documentation-style.md](../../rules/documentation-style.md), then commit.
 
-一人開発ではコミットメッセージが唯一の作業記録になる。**何をしたかではなく、何が変わったかを書く。**
+On a solo project the commit message is the only record of the work. **Say what changed, not what you did.**
 
-## 手順
+Conduct the conversation in the user's language — if they write in Japanese, reply in Japanese. **The commit message itself is always English**, per [ADR-0005](../../../docs/adr/0005-repository-language.md).
 
-### 1. 状態の把握
+## Procedure
 
-並列で実行する:
+### 1. Read the state
+
+Run in parallel:
 
 ```bash
 git status --short
@@ -23,104 +25,104 @@ git diff --staged --stat
 git log --oneline -10
 ```
 
-判断:
+Then decide:
 
-- **ステージ済みの変更がない場合** — 未ステージの変更があれば、何をステージするかを確認する。何もなければその旨を伝えて終了する
-- **コミットが1つもない場合**（`git log`が失敗する） — 初回コミットとして扱う。手順2へ
-- **通常のコミット** — 手順3へ
+- **Nothing staged** — if there are unstaged changes, ask what to stage. If there is nothing at all, say so and stop
+- **No commits yet** (`git log` fails) — treat it as the initial commit, go to step 2
+- **Otherwise** — go to step 3
 
-### 2. 初回コミットの場合
+### 2. Initial commit
 
-初回はファイル数が多くなるため、**コミット前に必ず確認する**:
+The first commit touches many files, so **always confirm before committing**:
 
-1. `git status --short`の全件を一覧で示す
-2. `.gitignore`を読み、**入るべきでないものが混ざっていないか**を確認する。特に注意するもの:
-   - `.env`・`.env.local`などの環境変数ファイル
-   - 認証情報・APIキー・証明書（`*.pem`・`*token*`・`*credential*`）
-   - `node_modules/`・`.next/`などのビルド成果物
-   - 大きなバイナリ（サンプルPSDなど。意図して入れるなら可）
-3. 疑わしいファイルがあれば、コミットせずに指摘する
+1. List everything from `git status --short`
+2. Read `.gitignore` and check that **nothing has slipped in that should not be committed**, especially:
+   - Environment files such as `.env` and `.env.local`
+   - Credentials, API keys, certificates (`*.pem`, `*token*`, `*credential*`)
+   - Build output such as `node_modules/` and `.next/`
+   - Large binaries such as sample PSDs — acceptable only if deliberate
+3. If anything looks doubtful, raise it instead of committing
 
-問題がなければメッセージは`chore: 初期セットアップ`のような形にし、何が入っているか（雛形・規約・ドキュメント等）を本文に箇条書きで添える。
+If it is clean, use a message like `chore: initial setup` with a body listing what went in (scaffolding, conventions, docs).
 
-### 3. 変更内容の分析
+### 3. Analyze the changes
 
-差分から特定する:
+From the diff, identify:
 
-- **変更されたファイルのパス** — `scope`の推定に使う
-- **変更の性質** — 新規追加・修正・バグ修正・整理・ドキュメント
-- **変更による効果** — 何ができるようになったか、何が直ったか
+- **Which paths changed** — used to infer `scope`
+- **What kind of change it is** — addition, fix, bug fix, cleanup, docs
+- **What effect it has** — what now works, what got fixed
 
-**差分が大きく、無関係な変更が混ざっている場合は分割を提案する。**「PSDパーサの切り替え」と「レイヤーパネルのCSS調整」が同じコミットに入っていたら、後から片方だけ戻せない。
+**If the diff is large and mixes unrelated changes, propose splitting it.** With "switch the PSD parser" and "tweak the layer panel CSS" in one commit, neither can be reverted alone later.
 
-### 4. メッセージの組み立て
+### 4. Build the message
 
-形式は`type(scope): 日本語の説明`。`scope`は省略してよい。
+The form is `type(scope): description`. The `scope` is optional.
 
 #### `type`
 
-| `type` | 用途 |
+| `type` | Use for |
 | --- | --- |
-| `feat` | 新機能の追加 |
-| `fix` | バグ修正 |
-| `docs` | ドキュメントのみの変更 |
-| `refactor` | 機能を変えないコード整理 |
-| `perf` | パフォーマンス改善 |
-| `test` | テストの追加・修正 |
-| `chore` | 依存関係・設定・雑務 |
+| `feat` | A new feature |
+| `fix` | A bug fix |
+| `docs` | Documentation only |
+| `refactor` | Restructuring with no behavior change |
+| `perf` | A performance improvement |
+| `test` | Adding or fixing tests |
+| `chore` | Dependencies, config, chores |
 
 #### `scope`
 
-変更されたパスから決める。複数にまたがるなら代表を選ぶか省略する。
+Derive it from the paths that changed. If the change spans several, pick the representative one or omit it.
 
-| パス | `scope` |
+| Path | `scope` |
 | --- | --- |
-| `app/`・`components/` | `ui`、または機能名（`viewer`・`layers`） |
-| `lib/` | `psd`・`canvas`など処理の対象 |
-| `hooks/`・`atoms/` | 対象のドメイン名 |
-| `docs/` | `docs`、またはADR番号（`adr`） |
-| `.claude/` | `rules`・`skills` |
-| 設定ファイル・依存 | 省略 |
+| `app/`, `components/` | `ui`, or the feature name (`viewer`, `layers`) |
+| `lib/` | What it operates on: `psd`, `canvas` |
+| `hooks/`, `atoms/` | The domain name |
+| `docs/` | `docs`, or `adr` for an ADR |
+| `.claude/` | `rules` or `skills` |
+| Config files, dependencies | Omit |
 
-#### 書き方
+#### Wording
 
-**作業内容ではなく効果を書く。**
+**Say what changed, not what you did.**
 
 ```
-Bad:  feat(viewer): レイヤーパネルのコンポーネントを実装
-Good: feat(viewer): レイヤーの表示切替と並び替えができるようになる
+Bad:  feat(viewer): implement the layer panel component
+Good: feat(viewer): let layers be toggled and reordered
 
-Bad:  fix: バグを修正
-Good: fix(canvas): 2つ目のPSDを開いたときのImageBitmapの解放漏れを直す
+Bad:  fix: fix a bug
+Good: fix(canvas): release the ImageBitmap when a second PSD is opened
 ```
 
-- 短く具体的に。修飾語を削る
-- 複数の変更を並列するときは`+`でつなぐ
-- 文末は体言止めか動詞終止形
-- 表記は[documentation-style.md](../../rules/documentation-style.md)に従う（英数字と日本語の間にスペースを入れない、コード参照はバッククォート）
+- Short and specific. Cut modifiers
+- Start lowercase, no trailing period
+- Join two parallel changes with `+`
+- Follow [documentation-style.md](../../rules/documentation-style.md) — backticks for code references, no hollow phrasing
 
-### 5. 候補の提示
+### 5. Offer candidates
 
-`AskUserQuestion`で**観点の異なる候補を3つ**出す。同じ内容の言い換えを3つ並べない。粒度・強調点・`scope`の取り方を変える。
+Use `AskUserQuestion` to offer **three candidates that differ in viewpoint**, not three rewordings of the same sentence. Vary the granularity, what gets emphasized, and how `scope` is drawn.
 
-ユーザーは「Other」で自由に入力できる。
+The user can always type their own through "Other".
 
-### 6. コミット
+### 6. Commit
 
-メッセージが決まったら、実行前に確認する。承認されたら`git commit`する。
+Confirm before running. Once approved, `git commit`.
 
-複数行にするときはヒアドキュメントを使う:
+Use a heredoc for a multi-line message:
 
 ```bash
 git commit -m "$(cat <<'MSG'
-type(scope): 要約
+type(scope): summary
 
-- 詳細1
-- 詳細2
+- detail
+- detail
 MSG
 )"
 ```
 
-コミット後は`git log --oneline -1`と`git status --short`で結果を示す。
+Afterwards show the result with `git log --oneline -1` and `git status --short`.
 
-**`git push`はこのスキルでは行わない。**押すかどうかは別の判断。
+**This skill does not `git push`.** Whether to push is a separate decision.

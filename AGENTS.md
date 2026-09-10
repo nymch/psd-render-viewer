@@ -8,44 +8,48 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-## コーディング規約
+## Language
 
-コードを書く前に該当する規約を読む。
+**Everything committed to this repository is written in English** — docs, comments, test names, commit messages, PR bodies. Two exceptions, both recorded in [docs/adr/0005-repository-language.md](docs/adr/0005-repository-language.md): user-facing UI strings, and the Japanese trigger phrases in each skill's `description` frontmatter. Conversation with the user follows whatever language they write in.
+
+## Coding conventions
+
+Read the relevant one before writing code.
 
 - TypeScript: [.claude/rules/typescript.md](.claude/rules/typescript.md)
-- React／Hooks・Canvas描画: [.claude/rules/react.md](.claude/rules/react.md)
-- テスト: [.claude/rules/testing.md](.claude/rules/testing.md)
-- ドキュメント・コメントの表記: [.claude/rules/documentation-style.md](.claude/rules/documentation-style.md)
+- React / hooks and Canvas rendering: [.claude/rules/react.md](.claude/rules/react.md)
+- Tests: [.claude/rules/testing.md](.claude/rules/testing.md)
+- Writing style for docs and comments: [.claude/rules/documentation-style.md](.claude/rules/documentation-style.md)
 
-## ドキュメント
+## Documentation
 
-[docs/README.md](docs/README.md)に置き場所をまとめている。仕様書は[docs/design/template.md](docs/design/template.md)、技術的な決定の記録は[docs/adr/template.md](docs/adr/template.md)を使う。用語と識別子の対応は[docs/glossary.md](docs/glossary.md)に従う。
+[docs/README.md](docs/README.md) says where things go. Specs use [docs/design/template.md](docs/design/template.md); technical decisions are recorded with [docs/adr/template.md](docs/adr/template.md). Terms and their identifiers follow [docs/glossary.md](docs/glossary.md).
 
-実装を始める前に、対象の機能について`docs/design/`に仕様書があるか確認する。無ければ`/write-spec`で作る。
+Before starting an implementation, check whether `docs/design/` has a spec for it. If not, write one with `/write-spec`.
 
-## スキル
+## Skills
 
-一人で開発しているため、レビュアーや相談相手にあたる役をスキルで補っている。一覧と使う順番は[.claude/skills/README.md](.claude/skills/README.md)を参照。
+This is a solo project, so skills stand in for the reviewer and the person to think out loud at. See [.claude/skills/README.md](.claude/skills/README.md) for the list and the order they're used in.
 
-- `/write-spec` — 仕様を詰めて`docs/design/`へ書き出す
-- `/write-adr` — 技術的な決定を詰めて`docs/adr/`へ記録する
-- `/devils-advocate` — 書き上がった文書に反論する
-- `/grilling` — 汎用の壁打ち
-- `/commit` — 変更を分析してコミットする
-- `/create-pr` — 差分を自己レビューしてPRを作成する
+- `/write-spec` — settle a spec, into `docs/design/`
+- `/write-adr` — settle a technical decision, into `docs/adr/`
+- `/devils-advocate` — argue against a finished document
+- `/grilling` — general-purpose interrogation
+- `/commit` — analyze the changes and commit
+- `/create-pr` — self-review the diff and open a PR
 
-## ブランチ運用
+## Branching
 
-簡易版git-flow。`main`がリリース済み、`develop`が統合ブランチ（GitHubのデフォルト）。
+Simplified git-flow. `main` is the released state, `develop` is the integration branch and the GitHub default.
 
-- `feature/*`・`fix/*`・`refactor/*`・`docs/*`・`chore/*` — `develop`から切り、`develop`へ戻す
-- `hotfix/*` — `main`から切り、`main`へ戻したあと`develop`にも取り込む
-- リリース — `develop`から`main`へPRを出す
+- `feature/*`, `fix/*`, `refactor/*`, `docs/*`, `chore/*` — branch from `develop`, merge back to `develop`
+- `hotfix/*` — branch from `main`, merge back to `main`, then also into `develop`
+- Release — open a PR from `develop` to `main`
 
-`release/*`ブランチは使わない。PRは`/create-pr`で作る。
+There are no `release/*` branches. PRs are opened with `/create-pr`.
 
-## 技術スタック
+## Stack
 
-Next.js 16（App Router）+ React 19 + TypeScript + Tailwind CSS v4。
+Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS v4.
 
-PSDの表示は`ag-psd`でパースしCanvas 2Dに描画する（選定の経緯は[docs/adr/0001-psd-parser.md](docs/adr/0001-psd-parser.md)）。データ取得はSWR、グローバル状態はJotai、検証と型導出はzod、submitのあるフォームはReact Hook Form + `zodResolver`。`ag-psd`以外はまだ`package.json`に入っていないため、使う段階でインストールする。
+PSDs are parsed with `ag-psd` and drawn with Canvas 2D — see [docs/adr/0001-psd-parser.md](docs/adr/0001-psd-parser.md) for why. Parsing and compositing run in a Web Worker ([docs/adr/0004-worker-offloading.md](docs/adr/0004-worker-offloading.md)). Global state is Jotai. Data fetching is SWR, validation and type derivation are zod, and forms with a submit use React Hook Form + `zodResolver`; those three are not in `package.json` yet, so install them when they are first needed.

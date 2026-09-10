@@ -1,42 +1,42 @@
-## 概要
+## Summary
 
-<!-- 何をするPRか。1〜3行 -->
+<!-- What this PR does, in 1-3 lines -->
 
-## 種別
+## Type
 
-- [ ] 機能追加
-- [ ] バグ修正
-- [ ] 改善（リファクタリング・パフォーマンス等）
-- [ ] ドキュメント
-- [ ] その他
+- [ ] Feature
+- [ ] Bug fix
+- [ ] Improvement (refactoring, performance, etc.)
+- [ ] Documentation
+- [ ] Other
 
-## 背景・目的
+## Background
 
-<!-- なぜこの変更が必要か。関連する仕様書やADRがあればリンクする -->
+<!-- Why this change is needed. Link the relevant spec or ADR if there is one -->
 
-## アプローチ
+## Approach
 
-<!-- どういう方針で解決したか。差分からは読み取れない設計判断・検討した代替案・選ばなかった理由を書く -->
+<!-- How it was solved. Design decisions the diff cannot show, alternatives considered, and why they were rejected -->
 
-## 変更内容
+## Changes
 
-<!-- 主要な変更点を箇条書きで -->
+<!-- The main changes, as a list -->
 
-## 動作確認
+## Verification
 
-- [ ] `npm run build`が通る
-- [ ] `npm run lint`が通る
-- [ ] `npm test`が通る
-- [ ] 実際に動かして確認した
+- [ ] `npm run build` passes
+- [ ] `npm run lint` passes
+- [ ] `npm test` passes
+- [ ] Verified by actually running it
 
-## ドキュメント更新
+## Documentation updates
 
-- [ ] `docs/glossary.md` — 用語やライブラリのAPIに変更・追加がある
-- [ ] `docs/adr/` — 後から理由を思い出したくなる技術判断をした
-- [ ] `docs/design/` — 仕様が変わった
-- [ ] `.claude/rules/` — 規約に変更がある
-- [ ] 上記いずれにも該当しない
+- [ ] `docs/glossary.md` — terms or library APIs changed
+- [ ] `docs/adr/` — made a technical decision worth remembering the reason for
+- [ ] `docs/design/` — the spec changed
+- [ ] `.claude/rules/` — the conventions changed
+- [ ] None of the above
 
-## 補足
+## Notes
 
-<!-- レビュー時に見てほしい点、未解決の論点、後回しにしたこと -->
+<!-- Open questions, things deferred, anything worth a closer look in review -->
