@@ -32,6 +32,7 @@ Split by what a document is for. **How** (a procedure) and **why** (how somethin
 - [ADR-0004 Move parsing and compositing into a Web Worker, and throw the worker away after each load](adr/0004-worker-offloading.md)
 - [ADR-0005 Write everything committed to the repository in English, and localize the UI separately](adr/0005-repository-language.md)
 - [ADR-0006 Split the verified `ag-psd` behavior out of the glossary into its own document](adr/0006-split-glossary.md)
+- [ADR-0007 Probe interactive recompositing on a long-lived worker that owns the canvas](adr/0007-interactive-recompositing-probe.md) (**proposed**)
 
 ## What does not go here
 
