@@ -82,13 +82,15 @@ The cost of a recomposite was unknown, and every option above turns on it. It is
 
 Re-parsing per toggle was dropped immediately: a load measures 320-480ms on a 105MB file, and the measurements above put parsing at 553-2532ms.
 
-**Compositing on the main thread is out, on the strength of one file.** `composite.ts` would run there unmodified, and for three of the four files it would be fine — 15ms, 36ms, and 66ms. The fourth costs 347ms, which is twenty dropped frames per toggle. Criterion 2 forbids answering that by ruling the file out.
+**Compositing on the main thread is out, on the strength of one file.** `composite.ts` would run there unmodified, and for three of the four files it would be fine — 15ms, 36ms, and 66ms. The fourth costs 347ms, which is twenty dropped frames per toggle. Criterion 2 forbids answering that by ruling the file out. **So the worker is insurance against the worst file rather than something the design needs**, and on three files in four it buys nothing a measurement can see.
 
-**Stacking pre-rendered units loses on criterion 2.** It is exact only when a toggleable unit is *isolated* — contiguous in draw order, and free of any blend mode that expects to mix with what lies outside the unit. Rendering a multiply layer on its own multiplies it against transparency instead of the backdrop, which is a different picture. Restricting to whole layer groups does not rescue it, and neither does restricting to single layers. It would mean constraining which blend modes may appear inside a switchable unit, and whether that constraint is tolerable cannot be judged without real files of the kind this is aimed at. **It stays as the fallback**, and the measurements give it a trigger: a document whose cold composite exceeds roughly a second has a toggle cost over 300ms and wants pre-rendering.
+**Stacking pre-rendered units loses on criterion 2.** It is exact only when a toggleable unit is *isolated* — contiguous in draw order, and free of any blend mode that expects to mix with what lies outside the unit. Rendering a multiply layer on its own multiplies it against transparency instead of the backdrop, which is a different picture. Restricting to whole layer groups does not rescue it, and neither does restricting to single layers. It would mean constraining which blend modes may appear inside a switchable unit, and whether that constraint is tolerable cannot be judged without real files of the kind this is aimed at. **It stays available for the speed problem, and only that one.** The measurements give it a trigger — a document whose cold composite runs past about a second has a toggle cost over 300ms — but the trigger and the constraint are independent of each other. **A file that is both slow and carries a blend mode reaching outside a switchable unit has no route here:** pre-rendering changes its picture, and not pre-rendering leaves the 347ms. Nothing in this decision covers that case.
 
 **`transferControlToOffscreen` was rejected once, conditionally.** ADR-0004 turned it down because "a canvas element can only be transferred once, which does not go together with disposable workers". The worker here is not disposable, so the reason does not apply. Transferring the canvas once removes the per-toggle copy entirely.
 
 **A separate route wins on criterion 1.** It also makes the existing viewer usable as a reference: the same PSD opened in both, showing the same layers, has to produce the same picture.
+
+**A session is one document.** Opening another terminates the worker and starts a fresh one. That is how ADR-0004 made a leak structurally impossible — decoded pixels die with the worker instead of being cleared by remembering to — and reusing the worker would hand that guarantee back while recreating the conditions behind its symptom A, where two documents' pixels were held at once. A canvas can only be transferred once, so the element is remounted under a new React key for each document. This also bounds what criterion 4 has to measure: the climb within one open document, not across a working day.
 
 **[ADR-0004](0004-worker-offloading.md) is not superseded.** Its decision remains right for a viewer that composites once and shows a picture. What changes is that its reasoning turns out to be scoped to that case, which nothing in it said.
 
@@ -102,7 +104,7 @@ Accepted because visibility toggling is a discrete click rather than a drag, thr
 
 1. **Can a worker draw into a canvas received through `transferControlToOffscreen`?** The one pass-or-fail item, and the first to settle. `ag-psd` already runs against an `OffscreenCanvas` inside the worker, but a transferred canvas is a separate question
 2. Does a toggle produce the same picture as the current viewer showing the same layers? **The viewer has no way to hide a layer** — `LayerRow` renders `visible` as styling and its only control collapses a group, and the spec keeps editing out of scope. So each compared state needs a PSD authored with that state baked in, which is the same work as `test/fixtures/` in #20. The comparison is exact, but it is not free
-3. How far does sustained RSS climb across a session on real data? **Recorded, not judged against a threshold set now**
+3. How far does memory climb while one document stays open and is toggled repeatedly? A worker's footprint is not visible from the page — `performance.memory` is Chrome-only, covers the heap rather than the process, and excludes workers, while `measureUserAgentSpecificMemory()` requires cross-origin isolation. So the measurement is Chrome's task manager (Shift+Esc), read against the tab before and after a run of toggles. Coarse, but enough to see whether it climbs. **Recorded, not judged against a threshold set now**
 
 Cost per toggle is no longer an open question.
 
@@ -115,15 +117,18 @@ Out of the probe: anything built on top of it — exporting a result, the UI for
 - Good: correctness gets a reference implementation instead of a human comparison
 - Good: the viewer keeps working throughout, and a failed probe costs one route
 - Bad: **two worker protocols exist side by side.** They share `lib/psd/` but not their message types or lifetimes, so a change to what the worker returns may have to be made twice
-- Bad: **a transferred canvas cannot be touched from the main thread again.** Sizing and clearing become the worker's job, and switching documents needs either a canvas the worker resizes or a remounted element. Which one is not decided here
-- Bad: **decoded pixels live for a whole session.** Peak memory is unchanged, since `readPsd` already decodes everything up front and holds it until compositing ends — what changes is how long it is held, and that is the risk the probe exists to size
-- Bad: **the worst measured file takes 347ms per toggle even in a worker.** Criterion 3 is met for three files in four
+- Bad: **a transferred canvas cannot be touched from the main thread again.** Sizing and clearing become the worker's job, and every document switch costs a remounted canvas element
+- Bad: **decoded pixels live for as long as their document is open.** Peak memory is unchanged, since `readPsd` already decodes everything up front and holds it until compositing ends — what changes is how long it is held, and that is the risk the probe exists to size
+- Bad: **the worst measured file takes 347ms per toggle even in a worker.** Criterion 3 is met for three files in four. What the worker buys on the fourth is a live UI during the wait instead of a frozen one, which is not the same as immediacy
+- Bad: **the worker earns its place on one file in four.** On the other three, compositing on the main thread would have been indistinguishable
 - Bad: the reference is a viewer verified only against Alpaca Studio, so a fault shared by both routes stays invisible
 - Bad: **no spec, so the route is documented by a comment.** `app/psd-check/page.tsx` set that precedent and is still here, having been slated for deletion since the spec was written. A probe outliving its purpose is the failure mode
 
 ## Notes
 
-- Revisit when criterion 4 fails, or when a file's cold composite exceeds about a second. Either way the move is to pre-rendered units, which brings back the isolation constraint and needs real files of the intended kind to judge
+- Revisit when criterion 4 fails, or when a file's cold composite exceeds about a second. The move is to pre-rendered units, which answers speed and nothing else — it brings back the isolation constraint and needs real files of the intended kind to judge
+- **The measured `warm` figures are an upper bound taken under favorable conditions.** A real toggle composites fewer visible nodes, which is cheaper, but arrives after an idle gap, when caches are colder. The two pull in opposite directions and nothing says they cancel
+- **Four files, one machine, one browser.** The cold-to-warm ratio spans 2.7 to 3.7, so the 3.3 used above puts a one-second cold composite anywhere between 270ms and 370ms. ADR-0003's unconfirmed section generalized from a single file and said so; this is the same kind of step
 - **A size limit is the wrong control for this.** `limits.ts` gates on longest edge and area, and area is precisely what fails to predict toggle cost here — the 18.4Mpx file has twice the area of the 9.1Mpx one and still costs less per toggle, 36ms against 66ms. Anything gating interactive mode should measure the first composite rather than the dimensions
 - **[ADR-0003](0003-deferred-layer-decoding.md) may come back.** ADR-0004 concluded that "almost nothing is left of the motivation for deferred decoding" — true under a disposable worker. Holding one document alive for a session restores exactly the motivation it had
 - The claim that peak memory is unchanged rests on `parse.ts`'s current read options, under which `readPsd` decodes everything up front. Reviving ADR-0003 would make it false
