@@ -48,7 +48,7 @@ export const ja = {
     edge: (edge: number, limit: number) =>
       `ドキュメントの長辺が${edge}pxで、上限の${limit}pxを超えている`,
     area: (area: number, limit: number) =>
-      `ドキュメントの面積が${area.toLocaleString()}pxで、上限の${limit.toLocaleString()}pxを超えている`,
+      `ドキュメントの面積が${area.toLocaleString()}px²で、上限の${limit.toLocaleString()}px²を超えている`,
     bitsPerChannel: (bitsPerChannel: number) =>
       `${bitsPerChannel}bit/チャンネルのPSDには対応していない（8bitのみ）`,
   },

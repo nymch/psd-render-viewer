@@ -245,14 +245,14 @@ Parsing used to happen on the main thread, which required waiting two `requestAn
 
 ### Document size limits
 
-**The longest edge is not enough on its own. Check both the edge and the area.** A browser canvas is constrained on both, and Chrome's area limit is 268,435,456px (exactly 16384×16384). Testing only for a 16384px edge lets a 16384×16384 PSD through into the area limit.
+**The longest edge is not enough on its own. Check both the edge and the area.** A browser canvas is constrained on both, and Chrome's area limit is 268,435,456px² (exactly 16384×16384). Testing only for a 16384px edge lets a 16384×16384 PSD through into the area limit.
 
 The area limit is derived from memory. What gets allocated at document size is three surfaces — the display canvas, the root buffer, and the RGBA being transferred — split across the worker and the main thread.
 
 | Limit | Provisional value | Basis |
 | --- | --- | --- |
 | Longest edge | 16384px | Matches Chrome's and Firefox's edge limit |
-| Area | 67,108,864px (8192×8192 equivalent) | 268MB each, about 800MB for three. That sits on top of `ag-psd`'s decoding (up to 2GB) |
+| Area | 67,108,864px² (8192×8192 equivalent) | 268MB each, about 800MB for three. That sits on top of `ag-psd`'s decoding (up to 2GB) |
 
 Both values are provisional and get adjusted by measurement. The check runs after `readPsd`, so `ag-psd`'s decoding memory is already allocated by then. **The area limit governs what can be stacked on top of that.**
 
@@ -310,7 +310,7 @@ The only thing that triggers a redraw in this version is opening a file, so no *
 - **What to do about `realMask`** — a second mask slot alongside `mask`. How real data fills it in has not been checked
 - **What to do about vector masks** — `vectorMask` holds path data only, with no rasterized pixels. Drawing the path would be on us, so the leaning is to leave it out this time, but that is not settled
 - **A `"pass through"` group carrying opacity or a mask** — Photoshop appears to isolate it, but this has not been checked against real data. Start with the spec's rule, drawing pass-through groups straight into the parent buffer, and switch to isolating if the picture does not match
-- **The actual limit values** — 16384px on the edge and 67,108,864px of area are both provisional and get adjusted by measurement, since browsers differ. The shape of the check — both edge and area — and the division of responsibility are settled. `ag-psd`'s decoding is watched cumulatively by `totalMemoryLimit`, so `limits.ts` covers **the canvas dimension and area limits, and the memory of the buffers stacked on top**
+- **The actual limit values** — 16384px on the edge and 67,108,864px² of area are both provisional and get adjusted by measurement, since browsers differ. The shape of the check — both edge and area — and the division of responsibility are settled. `ag-psd`'s decoding is watched cumulatively by `totalMemoryLimit`, so `limits.ts` covers **the canvas dimension and area limits, and the memory of the buffers stacked on top**
 - **`fillOpacity`** — readable as 0-1 at `layer.fillOpacity`, and a different thing from `opacity`. Not handled this time; whether a value below 1 should raise an unsupported mark is undecided
 
 ## How to verify
