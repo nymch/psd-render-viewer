@@ -58,6 +58,12 @@ describe("buildLayerTree", () => {
     expect(nodes[0]?.name).toBeNull();
   });
 
+  // The PSD format always stores a name, so a layer created without one comes back as ""
+  it("leaves name null when the layer name is empty", () => {
+    const {nodes} = buildLayerTree(psd([leaf({name: ""})]));
+    expect(nodes[0]?.name).toBeNull();
+  });
+
   it("multiplies a pass-through group's opacity into its children", () => {
     const {nodes} = buildLayerTree(
       psd([

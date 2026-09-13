@@ -120,7 +120,9 @@ function buildNode(
 
   const common: NodeCommon = {
     id,
-    name: layer.name ?? null,
+    // `||` rather than `??`: the PSD format always stores a name, so a layer created without
+    // one comes back as `""`. An empty name is the same fact as an absent one
+    name: layer.name || null,
     // ag-psd's hidden means the opposite of what it reads like
     visible: !layer.hidden,
     opacity,
