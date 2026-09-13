@@ -100,11 +100,20 @@ A worker keeps the main thread free. It does not make the picture arrive sooner.
 
 Accepted because visibility toggling is a discrete click rather than a drag, three of four files land between 15ms and 66ms, and the fallback for the fourth is named above. **A slider would not survive this**, which is one reason opacity is deferred.
 
+### What the probe has settled
+
+**A worker can draw into a canvas received through `transferControlToOffscreen`.** The pass-or-fail item passes. It was checked on a scratch route with a worker importing nothing from `lib/psd/`, so the answer is about the canvas transfer rather than about ag-psd or compositing. The route was deleted once it had answered, rather than left to become another `psd-check`; it is in `66e6cdb` if questions 1 and 2 want a starting point. The proof is a pixel read back inside the worker matching the fill color exactly — dimensions alone prove nothing, since ADR-0004 found an `ImageBitmap` with the right size and no contents. Resizing the canvas from the worker works, which document switching depends on, and `getContext("2d")` on the element from the main thread throws `InvalidStateError`, as the design assumes.
+
+Two things came with it that the decision had not anticipated.
+
+**StrictMode transfers twice.** The app router runs an effect twice in development against the same element, and a canvas can only be transferred once, so the second pass throws unless it is guarded. A ref recording the transfer is enough, but the real route needs it from the start rather than discovering it.
+
+**The contents survive `terminate()`.** Unlike an `ImageBitmap`, a transferred canvas keeps what was drawn once its worker is gone. The remount decided above still stands — its reason is that a canvas can only be transferred once, not that the picture is lost — but it now has a visible cost. **Remounting at the start of a document switch blanks the picture before the new file is known to parse**, which is the opposite of what the spec asks for when a load fails. Drawing the new document into a hidden canvas and swapping once it is ready is the obvious answer, and is not decided here.
+
 ### What the probe still has to answer
 
-1. **Can a worker draw into a canvas received through `transferControlToOffscreen`?** The one pass-or-fail item, and the first to settle. `ag-psd` already runs against an `OffscreenCanvas` inside the worker, but a transferred canvas is a separate question
-2. Does a toggle produce the same picture as the current viewer showing the same layers? **The viewer has no way to hide a layer** — `LayerRow` renders `visible` as styling and its only control collapses a group, and the spec keeps editing out of scope. So each compared state needs a PSD authored with that state baked in, which is the same work as `test/fixtures/` in #20. The comparison is exact, but it is not free
-3. How far does memory climb while one document stays open and is toggled repeatedly? A worker's footprint is not visible from the page — `performance.memory` is Chrome-only, covers the heap rather than the process, and excludes workers, while `measureUserAgentSpecificMemory()` requires cross-origin isolation. So the measurement is Chrome's task manager (Shift+Esc), read against the tab before and after a run of toggles. Coarse, but enough to see whether it climbs. **Recorded, not judged against a threshold set now**
+1. Does a toggle produce the same picture as the current viewer showing the same layers? **The viewer has no way to hide a layer** — `LayerRow` renders `visible` as styling and its only control collapses a group, and the spec keeps editing out of scope. So each compared state needs a PSD authored with that state baked in, which is the same work as `test/fixtures/` in #20. The comparison is exact, but it is not free
+2. How far does memory climb while one document stays open and is toggled repeatedly? A worker's footprint is not visible from the page — `performance.memory` is Chrome-only, covers the heap rather than the process, and excludes workers, while `measureUserAgentSpecificMemory()` requires cross-origin isolation. So the measurement is Chrome's task manager (Shift+Esc), read against the tab before and after a run of toggles. Coarse, but enough to see whether it climbs. **Recorded, not judged against a threshold set now**
 
 Cost per toggle is no longer an open question.
 
@@ -117,7 +126,7 @@ Out of the probe: anything built on top of it — exporting a result, the UI for
 - Good: correctness gets a reference implementation instead of a human comparison
 - Good: the viewer keeps working throughout, and a failed probe costs one route
 - Bad: **two worker protocols exist side by side.** They share `lib/psd/` but not their message types or lifetimes, so a change to what the worker returns may have to be made twice
-- Bad: **a transferred canvas cannot be touched from the main thread again.** Sizing and clearing become the worker's job, and every document switch costs a remounted canvas element
+- Bad: **a transferred canvas cannot be touched from the main thread again**, confirmed by measurement rather than assumed. Sizing and clearing become the worker's job, every document switch costs a remounted canvas element, and the remount has to be hidden until the new document is drawn or the previous picture disappears too early
 - Bad: **decoded pixels live for as long as their document is open.** Peak memory is unchanged, since `readPsd` already decodes everything up front and holds it until compositing ends — what changes is how long it is held, and that is the risk the probe exists to size
 - Bad: **the worst measured file takes 347ms per toggle even in a worker.** Criterion 3 is met for three files in four. What the worker buys on the fourth is a live UI during the wait instead of a frozen one, which is not the same as immediacy
 - Bad: **the worker earns its place on one file in four.** On the other three, compositing on the main thread would have been indistinguishable
@@ -128,6 +137,7 @@ Out of the probe: anything built on top of it — exporting a result, the UI for
 
 - Revisit when criterion 4 fails, or when a file's cold composite exceeds about a second. The move is to pre-rendered units, which answers speed and nothing else — it brings back the isolation constraint and needs real files of the intended kind to judge
 - **The measured `warm` figures are an upper bound taken under favorable conditions.** A real toggle composites fewer visible nodes, which is cheaper, but arrives after an idle gap, when caches are colder. The two pull in opposite directions and nothing says they cancel
+- **The transfer has to be guarded against StrictMode from the first line of the real route.** Transferring twice throws, the development build does it by default, and the production build does not — so an unguarded version works in production and breaks only while being developed
 - **Four files, one machine, one browser.** The cold-to-warm ratio spans 2.7 to 3.7, so the 3.3 used above puts a one-second cold composite anywhere between 270ms and 370ms. ADR-0003's unconfirmed section generalized from a single file and said so; this is the same kind of step
 - **A size limit is the wrong control for this.** `limits.ts` gates on longest edge and area, and area is precisely what fails to predict toggle cost here — the 18.4Mpx file has twice the area of the 9.1Mpx one and still costs less per toggle, 36ms against 66ms. Anything gating interactive mode should measure the first composite rather than the dimensions
 - **[ADR-0003](0003-deferred-layer-decoding.md) may come back.** ADR-0004 concluded that "almost nothing is left of the motivation for deferred decoding" — true under a disposable worker. Holding one document alive for a session restores exactly the motivation it had
