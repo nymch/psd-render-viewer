@@ -102,7 +102,7 @@ Accepted because visibility toggling is a discrete click rather than a drag, thr
 
 ### What the probe has settled
 
-**A worker can draw into a canvas received through `transferControlToOffscreen`.** The pass-or-fail item passes. It was checked on `app/offscreen-check/`, with a worker importing nothing from `lib/psd/`, so the answer is about the canvas transfer rather than about ag-psd or compositing. The proof is a pixel read back inside the worker matching the fill color exactly — dimensions alone prove nothing, since ADR-0004 found an `ImageBitmap` with the right size and no contents. Resizing the canvas from the worker works, which document switching depends on, and `getContext("2d")` on the element from the main thread throws `InvalidStateError`, as the design assumes.
+**A worker can draw into a canvas received through `transferControlToOffscreen`.** The pass-or-fail item passes. It was checked on a scratch route with a worker importing nothing from `lib/psd/`, so the answer is about the canvas transfer rather than about ag-psd or compositing. The route was deleted once it had answered, rather than left to become another `psd-check`; it is in `66e6cdb` if questions 1 and 2 want a starting point. The proof is a pixel read back inside the worker matching the fill color exactly — dimensions alone prove nothing, since ADR-0004 found an `ImageBitmap` with the right size and no contents. Resizing the canvas from the worker works, which document switching depends on, and `getContext("2d")` on the element from the main thread throws `InvalidStateError`, as the design assumes.
 
 Two things came with it that the decision had not anticipated.
 
