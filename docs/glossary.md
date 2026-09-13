@@ -28,7 +28,7 @@ Fixes the word used for each concept and the identifier it takes in code. Follow
 | Pass through | 通過 | `"pass through"` | One of the group blend modes. The group's contents go straight up to the parent and composite with the layers below |
 | Isolated | 分離 | `isolated` | Compositing a group's children into one buffer before compositing that buffer into the parent — what every group other than pass through does. **Photoshop has no such word in either language**; this repository uses it to describe the compositing model |
 | Unsupported | 未対応 | `unsupported` | An element this app cannot reproduce. Shown to the user with this word. **In Japanese it is 未対応** — not 非対応, not サポート外 |
-| Unnamed | 名称未設定 | — | A layer carrying no name. `LayerNode.name` is `null`, and the layer panel shows this word in its place. Photoshop's own word for untitled |
+| Unnamed | 名称未設定 | — | A layer carrying no name, an empty one included. `LayerNode.name` is `null`, and the layer panel shows this word in its place. Photoshop's own word for untitled |
 
 ## Rendering
 
