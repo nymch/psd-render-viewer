@@ -23,6 +23,7 @@ Split by what a document is for. **How** (a procedure) and **why** (how somethin
 ### Specs
 
 - [PSD viewer (first version)](design/psd-viewer-v1.md)
+- [UI text dictionary](design/ui-text-dictionary.md)
 
 ### ADRs
 
