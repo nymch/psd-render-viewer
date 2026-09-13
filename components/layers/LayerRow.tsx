@@ -2,15 +2,37 @@
 
 import {useState} from "react";
 import {Tooltip} from "@/components/ui/Tooltip";
-import {describeUnsupported} from "@/lib/psd/tree";
-import type {LayerNode} from "@/lib/psd/tree";
+import {useDictionary} from "@/hooks/i18nHooks";
+import type {Dictionary} from "@/lib/i18n";
+import type {LayerNode, UnsupportedReason} from "@/lib/psd/tree";
 
 type LayerRowProps = {
   node: LayerNode;
   depth: number;
 };
 
+function describeUnsupported(
+  text: Dictionary["unsupported"],
+  reason: UnsupportedReason,
+): string {
+  switch (reason.kind) {
+    case "adjustment-layer":
+      return text.adjustmentLayer;
+    case "layer-effects":
+      return text.layerEffects;
+    case "blend-mode":
+      return text.blendMode(reason.blendMode);
+    case "clipped-elements-ungrouped":
+      return text.clippedElementsUngrouped;
+    case "vector-mask":
+      return text.vectorMask;
+    default:
+      return reason satisfies never;
+  }
+}
+
 export function LayerRow({node, depth}: LayerRowProps) {
+  const text = useDictionary();
   const isGroup = node.kind === "group";
   // ag-psd's opened is the expanded state the PSD carries. Absent, start expanded
   const [isOpen, setIsOpen] = useState(true);
@@ -36,8 +58,11 @@ export function LayerRow({node, depth}: LayerRowProps) {
           <span className="w-4 shrink-0" />
         )}
 
-        <span className="truncate" title={node.name}>
-          {node.name}
+        <span
+          className="truncate"
+          title={node.name ?? text.layerPanel.unnamedLayer}
+        >
+          {node.name ?? text.layerPanel.unnamedLayer}
         </span>
 
         <span className="ml-auto shrink-0 tabular-nums text-zinc-500">
@@ -50,11 +75,13 @@ export function LayerRow({node, depth}: LayerRowProps) {
 
         {node.unsupported.length > 0 && (
           <Tooltip
-            label={node.unsupported.map(describeUnsupported).join("\n")}
+            label={node.unsupported
+              .map((reason) => describeUnsupported(text.unsupported, reason))
+              .join("\n")}
           >
             <span
               className="shrink-0 cursor-help text-amber-600 dark:text-amber-400"
-              aria-label="未対応の要素がある"
+              aria-label={text.layerPanel.unsupportedBadge}
             >
               ⚠
             </span>

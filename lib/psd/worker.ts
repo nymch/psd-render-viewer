@@ -1,13 +1,13 @@
 import {initializeCanvas} from "ag-psd";
 import {compositeDocument} from "@/lib/psd/composite";
-import {
-  checkBitsPerChannel,
-  checkDocumentSize,
-  describeRejection,
-} from "@/lib/psd/limits";
+import {checkBitsPerChannel, checkDocumentSize} from "@/lib/psd/limits";
 import {parsePsd} from "@/lib/psd/parse";
 import {buildLayerTree} from "@/lib/psd/tree";
-import type {WorkerRequest, WorkerResponse} from "@/lib/psd/workerMessage";
+import type {
+  WorkerFailure,
+  WorkerRequest,
+  WorkerResponse,
+} from "@/lib/psd/workerMessage";
 
 /**
  * The worker that parses and composites a PSD.
@@ -48,14 +48,14 @@ type WorkerScope = {
 
 const scope = self as unknown as WorkerScope;
 
-function toMessage(error: unknown): string {
-  if (!(error instanceof Error)) return String(error);
+function toFailure(error: unknown): WorkerFailure {
+  if (!(error instanceof Error)) return {kind: "raw", message: String(error)};
   // ag-psd throws with this message once the memory budget runs out. Left as it is, it says
   // nothing about what happened
   if (error.message === "Exceeded memory limit") {
-    return "PSDが大きすぎて読み込めない";
+    return {kind: "memoryLimit"};
   }
-  return error.message;
+  return {kind: "raw", message: error.message};
 }
 
 function respond(response: WorkerResponse): void {
@@ -70,11 +70,18 @@ scope.onmessage = (event: MessageEvent<WorkerRequest>) => {
   try {
     const psd = parsePsd(event.data.buffer);
 
+    // Reported rather than thrown, so the classification survives to the main thread
     const depth = checkBitsPerChannel(psd.bitsPerChannel);
-    if (!depth.ok) throw new Error(describeRejection(depth));
+    if (!depth.ok) {
+      respond({status: "error", failure: {kind: "document", rejection: depth}});
+      return;
+    }
 
     const size = checkDocumentSize(psd.width, psd.height);
-    if (!size.ok) throw new Error(describeRejection(size));
+    if (!size.ok) {
+      respond({status: "error", failure: {kind: "document", rejection: size}});
+      return;
+    }
 
     const {nodes, pixels} = buildLayerTree(psd);
     const composited = compositeDocument({
@@ -105,6 +112,6 @@ scope.onmessage = (event: MessageEvent<WorkerRequest>) => {
       height: psd.height,
     });
   } catch (error) {
-    respond({status: "error", message: toMessage(error)});
+    respond({status: "error", failure: toFailure(error)});
   }
 };

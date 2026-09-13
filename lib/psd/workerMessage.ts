@@ -1,12 +1,29 @@
+import type {DocumentRejection} from "@/lib/psd/limits";
 import type {LayerNode} from "@/lib/psd/tree";
 
 /**
  * The messages exchanged between the main thread and the worker.
  *
  * Both sides use the same types, which makes `switch` exhaustiveness checking work.
- * Only what structured clone can carry goes in here. An `Error` loses its class, so it is
- * converted to a string before being sent.
+ * Only what structured clone can carry goes in here. An `Error` loses its class, so a failure
+ * travels as `WorkerFailure` instead.
  */
+
+/**
+ * What reached the error channel, classified rather than worded.
+ *
+ * Only `document` and `memoryLimit` are conditions this code tests for, so only they can carry
+ * a key. `raw` is `ag-psd` throwing or an invariant breaking: **a localized internal message is
+ * harder to trace than the original**, and the difference between the two matters — a parse
+ * failure means the file is the problem, an invariant break means this code is.
+ *
+ * `DocumentRejection` needs no new shape. It is already a key and its arguments, so formatting
+ * simply moves to where the dictionary is.
+ */
+export type WorkerFailure =
+  | {kind: "document"; rejection: DocumentRejection}
+  | {kind: "memoryLimit"}
+  | {kind: "raw"; message: string};
 
 export type WorkerRequest = {
   /** The file's contents. Transferable, so ownership goes with it */
@@ -32,5 +49,5 @@ export type WorkerResponse =
     }
   | {
       status: "error";
-      message: string;
+      failure: WorkerFailure;
     };

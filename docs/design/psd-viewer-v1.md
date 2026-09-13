@@ -75,7 +75,7 @@ What gets read from `ag-psd`. The read options are `useImageData: true`, `skipCo
 | Layer bounds | `layer.left`, `top`, `right`, `bottom` | Document coordinates. Used as the offset when drawing |
 | Pixels | `layer.imageData` | Typed `PixelData`. Sized to the layer bounds, not the document |
 | Layer mask | `layer.mask` | Uses `imageData`, the rectangle, `disabled`, and `defaultColor`. The mask's rectangle does not match the layer's |
-| Name | `layer.name` | When `undefined`, display the `UNNAMED_LAYER` placeholder |
+| Name | `layer.name` | When `undefined`, held as `null`. The layer panel supplies the placeholder |
 
 The state the app holds, and where it lives. The approach follows [react.md](../../.claude/rules/react.md).
 
@@ -114,7 +114,7 @@ Drawing is concentrated in `CanvasViewport` because a ref is per-component. Putt
 | A layer with no pixels (an adjustment layer, say) | Skip drawing it, but show it in the panel. Mark it unsupported |
 | A blend mode with no matching operation | Fall back to `normal` and carry on drawing. Mark it unsupported |
 | A layer carrying layer effects | Draw `imageData` as it is, with the effects not reproduced. Mark it unsupported |
-| `name` is `undefined` | Display the `UNNAMED_LAYER` placeholder |
+| `name` is `undefined` | Held as `null`, and the layer panel displays its placeholder |
 
 Unsupported elements are surfaced at three levels.
 

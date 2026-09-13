@@ -4,6 +4,7 @@ import {useAtomValue} from "jotai";
 import {useRef} from "react";
 import {documentAtom, loadAttemptAtom} from "@/atoms/document";
 import {zoomModeAtom} from "@/atoms/viewport";
+import {useDictionary} from "@/hooks/i18nHooks";
 import {usePsdDocument} from "@/hooks/psdHooks";
 
 /**
@@ -16,6 +17,7 @@ import {usePsdDocument} from "@/hooks/psdHooks";
  * start, so everything stays reachable.
  */
 export function CanvasViewport() {
+  const text = useDictionary().viewer;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const loaded = useAtomValue(documentAtom);
   const attempt = useAtomValue(loadAttemptAtom);
@@ -37,9 +39,7 @@ export function CanvasViewport() {
         hidden={loaded === null}
       />
       {loaded === null && attempt.status !== "parsing" && (
-        <p className="m-auto text-sm text-zinc-500">
-          PSDファイルを選ぶか、ここへドロップする
-        </p>
+        <p className="m-auto text-sm text-zinc-500">{text.empty}</p>
       )}
     </div>
   );

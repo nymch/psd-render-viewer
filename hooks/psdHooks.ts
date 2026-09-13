@@ -5,7 +5,52 @@ import {useEffect, useRef} from "react";
 import type {RefObject} from "react";
 import {documentAtom, loadAttemptAtom} from "@/atoms/document";
 import {layerTreeAtom} from "@/atoms/layers";
-import type {WorkerRequest, WorkerResponse} from "@/lib/psd/workerMessage";
+import {useDictionary} from "@/hooks/i18nHooks";
+import type {Dictionary} from "@/lib/i18n";
+import type {DocumentRejection} from "@/lib/psd/limits";
+import type {
+  WorkerFailure,
+  WorkerRequest,
+  WorkerResponse,
+} from "@/lib/psd/workerMessage";
+
+/**
+ * Turns a classified failure into the sentence the error line shows.
+ *
+ * `raw` passes through untouched. It is `ag-psd`'s message or a broken invariant, and the
+ * original text names the line that produced it.
+ */
+function describeFailure(
+  text: Dictionary["loadError"],
+  failure: WorkerFailure,
+): string {
+  switch (failure.kind) {
+    case "document":
+      return describeRejection(text, failure.rejection);
+    case "memoryLimit":
+      return text.memoryLimit;
+    case "raw":
+      return failure.message;
+    default:
+      return failure satisfies never;
+  }
+}
+
+function describeRejection(
+  text: Dictionary["loadError"],
+  rejection: DocumentRejection,
+): string {
+  switch (rejection.reason) {
+    case "edge":
+      return text.edge(rejection.edge, rejection.limit);
+    case "area":
+      return text.area(rejection.area, rejection.limit);
+    case "bits-per-channel":
+      return text.bitsPerChannel(rejection.bitsPerChannel);
+    default:
+      return rejection satisfies never;
+  }
+}
 
 /**
  * Covers everything from opening a file to drawing it on the canvas.
@@ -19,6 +64,7 @@ import type {WorkerRequest, WorkerResponse} from "@/lib/psd/workerMessage";
 export function usePsdDocument(
   canvasRef: RefObject<HTMLCanvasElement | null>,
 ): void {
+  const text = useDictionary().loadError;
   const attempt = useAtomValue(loadAttemptAtom);
   const setAttempt = useSetAtom(loadAttemptAtom);
   const setDocument = useSetAtom(documentAtom);
@@ -41,7 +87,11 @@ export function usePsdDocument(
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
       const result = event.data;
       if (result.status === "error") {
-        setAttempt({status: "error", fileName: file.name, message: result.message});
+        setAttempt({
+          status: "error",
+          fileName: file.name,
+          message: describeFailure(text, result.failure),
+        });
         worker.terminate();
         return;
       }
@@ -67,7 +117,7 @@ export function usePsdDocument(
       setAttempt({
         status: "error",
         fileName: file.name,
-        message: event.message || "Workerでエラーが起きた",
+        message: event.message || text.workerError,
       });
       worker.terminate();
     };
@@ -90,7 +140,7 @@ export function usePsdDocument(
 
     // Another file arriving mid-load throws away the running worker with it
     return () => worker.terminate();
-  }, [attempt, setAttempt, setDocument, setLayerTree]);
+  }, [attempt, setAttempt, setDocument, setLayerTree, text]);
 
   // Move the composited result onto the canvas. Changing a canvas's dimensions wipes its
   // contents, so drawing is concentrated here. Without the dependency, every re-render would

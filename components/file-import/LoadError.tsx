@@ -2,6 +2,7 @@
 
 import {useAtomValue} from "jotai";
 import {loadAttemptAtom} from "@/atoms/document";
+import {useDictionary} from "@/hooks/i18nHooks";
 
 /**
  * Shows the file that most recently failed to open, along the bottom.
@@ -9,6 +10,7 @@ import {loadAttemptAtom} from "@/atoms/document";
  * both always carry a filename.
  */
 export function LoadError() {
+  const text = useDictionary().loadError;
   const attempt = useAtomValue(loadAttemptAtom);
   if (attempt.status !== "error") return null;
 
@@ -17,7 +19,7 @@ export function LoadError() {
       role="alert"
       className="border-t border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
     >
-      ⚠ {attempt.fileName}を読み込めなかった: {attempt.message}
+      {text.frame(attempt.fileName, attempt.message)}
     </p>
   );
 }
