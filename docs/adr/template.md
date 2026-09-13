@@ -29,6 +29,10 @@ date: YYYY-MM-DD
 - Good: {what this decision improves}
 - Bad: {what it gives up, the cost taken on}
 
+### Unconfirmed
+
+- {What the decision rests on that was not actually checked, and what would change if it turned out otherwise. Delete the section only if nothing was left unchecked — an empty one usually means it was not looked for}
+
 ## Notes
 
 {Links to what informed the decision, when it should be revisited, related ADRs. Delete the section if there is nothing to put in it.}
