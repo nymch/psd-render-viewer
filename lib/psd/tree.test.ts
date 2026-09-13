@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest";
 import type {Layer, Psd} from "ag-psd";
-import {UNNAMED_LAYER, buildLayerTree, countUnsupported} from "@/lib/psd/tree";
+import {buildLayerTree, countUnsupported} from "@/lib/psd/tree";
 import type {LayerGroup, LayerNode} from "@/lib/psd/tree";
 
 function pixels(width = 1, height = 1) {
@@ -53,9 +53,9 @@ describe("buildLayerTree", () => {
     expect(nodes[0]?.visible).toBe(true);
   });
 
-  it("falls back to UNNAMED_LAYER when name is undefined", () => {
+  it("leaves name null when the layer carries none", () => {
     const {nodes} = buildLayerTree(psd([leaf({name: undefined})]));
-    expect(nodes[0]?.name).toBe(UNNAMED_LAYER);
+    expect(nodes[0]?.name).toBeNull();
   });
 
   it("multiplies a pass-through group's opacity into its children", () => {

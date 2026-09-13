@@ -2,6 +2,7 @@
 
 import {useAtomValue} from "jotai";
 import {loadAttemptAtom} from "@/atoms/document";
+import {useDictionary} from "@/hooks/i18nHooks";
 
 /**
  * The loading indicator.
@@ -15,13 +16,14 @@ import {loadAttemptAtom} from "@/atoms/document";
  * responsive underneath and the overlay is what blocks it.
  */
 export function LoadingOverlay() {
+  const text = useDictionary().viewer;
   const attempt = useAtomValue(loadAttemptAtom);
   if (attempt.status !== "parsing") return null;
 
   return (
     <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 dark:bg-black/70">
       <p className="rounded border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-600 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-        {attempt.file.name}を読み込んでいる…
+        {text.loading(attempt.file.name)}
       </p>
     </div>
   );

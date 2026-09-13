@@ -52,16 +52,3 @@ export function checkBitsPerChannel(
   }
   return {ok: true};
 }
-
-export function describeRejection(rejection: DocumentRejection): string {
-  switch (rejection.reason) {
-    case "edge":
-      return `画像の長辺が${rejection.edge}pxで、上限の${rejection.limit}pxを超えている`;
-    case "area":
-      return `画像の面積が${rejection.area.toLocaleString()}pxで、上限の${rejection.limit.toLocaleString()}pxを超えている`;
-    case "bits-per-channel":
-      return `${rejection.bitsPerChannel}bit/チャンネルのPSDには対応していない（8bitのみ）`;
-    default:
-      return rejection satisfies never;
-  }
-}

@@ -1,8 +1,6 @@
 import type {BlendMode, Layer, Psd} from "ag-psd";
 import {resolveBlendMode} from "@/lib/psd/blendMode";
 
-export const UNNAMED_LAYER = "(名称未設定)";
-
 export type Bounds = {left: number; top: number; right: number; bottom: number};
 
 /** Pixel data itself lives on a ref; a node holds only this id */
@@ -37,7 +35,8 @@ export type UnsupportedReason =
 
 type NodeCommon = {
   id: string;
-  name: string;
+  /** Null when the layer carries no name. The panel decides what to show instead */
+  name: string | null;
   visible: boolean;
   /** The PSD's own value (0-1), as it is. Shown in the layer panel */
   opacity: number;
@@ -121,7 +120,7 @@ function buildNode(
 
   const common: NodeCommon = {
     id,
-    name: layer.name ?? UNNAMED_LAYER,
+    name: layer.name ?? null,
     // ag-psd's hidden means the opposite of what it reads like
     visible: !layer.hidden,
     opacity,
@@ -234,21 +233,4 @@ export function countUnsupported(nodes: LayerNode[]): number {
     const children = node.kind === "group" ? countUnsupported(node.children) : 0;
     return total + own + children;
   }, 0);
-}
-
-export function describeUnsupported(reason: UnsupportedReason): string {
-  switch (reason.kind) {
-    case "adjustment-layer":
-      return "調整レイヤーは描画しない。下のレイヤーの色は変わらない";
-    case "layer-effects":
-      return "レイヤー効果は再現しない。効果を除いたピクセルだけを描く";
-    case "blend-mode":
-      return `描画モード「${reason.blendMode}」に対応する合成演算が無いため、通常合成で描く`;
-    case "clipped-elements-ungrouped":
-      return "クリッピングレイヤーをグループとして合成しない設定には対応していない";
-    case "vector-mask":
-      return "ベクトルマスクは適用しない";
-    default:
-      return reason satisfies never;
-  }
 }

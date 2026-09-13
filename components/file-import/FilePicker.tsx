@@ -2,6 +2,7 @@
 
 import {useSetAtom} from "jotai";
 import {loadAttemptAtom} from "@/atoms/document";
+import {useDictionary} from "@/hooks/i18nHooks";
 
 /**
  * The toolbar's file picker. Like the drop target, it only writes the File into an atom.
@@ -10,11 +11,12 @@ import {loadAttemptAtom} from "@/atoms/document";
  * the running worker, so there is no risk of two running at once.
  */
 export function FilePicker() {
+  const text = useDictionary().filePicker;
   const setAttempt = useSetAtom(loadAttemptAtom);
 
   return (
     <label className="inline-flex cursor-pointer items-center rounded border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
-      ファイルを選択
+      {text.label}
       <input
         type="file"
         accept=".psd,.psb"
