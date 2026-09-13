@@ -2,7 +2,7 @@
  * Whether a document can be opened at all.
  *
  * Both the longest edge and the area are checked. A browser canvas is constrained on both, and
- * Chrome's area limit is 268,435,456px (exactly 16384x16384). Testing only for the edge lets a
+ * Chrome's area limit is 268,435,456px² (exactly 16384x16384). Testing only for the edge lets a
  * 16384x16384 document through into the area limit.
  *
  * The area limit is derived from memory. What gets allocated at document size is three
