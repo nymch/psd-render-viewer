@@ -31,7 +31,7 @@ Good: when `blendMode` is `"multiply"`, compositing changes
 
 - Use the Oxford comma.
 - For a pair of alternatives, use a spaced slash: `parse / render`.
-- Use an em dash for an aside — like this — without spaces around it.
+- Use an em dash for an aside — like this — with a space on each side.
 
 ### Register
 
