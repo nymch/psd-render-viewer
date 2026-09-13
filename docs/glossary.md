@@ -18,13 +18,17 @@ Fixes the word used for each concept and the identifier it takes in code. Follow
 | Fill opacity | 塗りの不透明度 | `fillOpacity` | Opacity of the fill alone, with layer effects excluded. Not the same thing as `opacity` |
 | Clipping mask | クリッピングマスク | `clippingMask` | Clips a layer to the opaque part of the layer below it |
 | Layer mask | レイヤーマスク | `layerMask` | A grayscale mask attached to a layer |
+| Vector mask | ベクトルマスク | `vectorMask` | A mask whose shape comes from a path rather than from pixels. **The Japanese label is ベクトルマスク, never ベクターマスク** — ベクター is the commoner word in general Japanese, but Photoshop uses ベクトル throughout |
+| Layer effects | レイヤー効果 | `layerEffects` | Drop shadows, strokes, and the rest, held on a layer and applied at composite time. This app draws the pixels without them |
 | Text layer | テキストレイヤー | `textLayer` | A layer carrying text. Photoshop's English UI calls this a *type layer*; the identifier stays `textLayer` |
 | Adjustment layer | 調整レイヤー | `adjustmentLayer` | Changes the tone of the layers below it. Carries no pixel data |
 | Smart object | スマートオブジェクト | `smartObject` | A layer placed while keeping its source data |
 | Artboard | アートボード | `artboard` | Several screen areas held inside one PSD |
+| Normal | 通常 | `"normal"` | The default blend mode. What an unsupported blend mode falls back to |
 | Pass through | 通過 | `"pass through"` | One of the group blend modes. The group's contents go straight up to the parent and composite with the layers below |
 | Isolated | 分離 | `isolated` | Compositing a group's children into one buffer before compositing that buffer into the parent — what every group other than pass through does. **Photoshop has no such word in either language**; this repository uses it to describe the compositing model |
 | Unsupported | 未対応 | `unsupported` | An element this app cannot reproduce. Shown to the user with this word. **In Japanese it is 未対応** — not 非対応, not サポート外 |
+| Unnamed | 名称未設定 | — | A layer carrying no name. `LayerNode.name` is `null`, and the layer panel shows this word in its place. Photoshop's own word for untitled |
 
 ## Rendering
 

@@ -26,7 +26,7 @@ export const ja = {
     empty: "レイヤーがない",
     unsupportedCount: (count: number) => `未対応${count}件`,
     /** Shown in place of the name when a layer carries none */
-    unnamedLayer: "(名称未設定)",
+    unnamedLayer: "（名称未設定）",
     unsupportedBadge: "未対応の要素がある",
   },
   /** One entry per `UnsupportedReason`, formatted in LayerRow */
@@ -34,21 +34,21 @@ export const ja = {
     adjustmentLayer: "調整レイヤーは描画しない。下のレイヤーの色は変わらない",
     layerEffects: "レイヤー効果は再現しない。効果を除いたピクセルだけを描く",
     blendMode: (blendMode: BlendMode) =>
-      `描画モード「${blendMode}」に対応する合成演算が無いため、通常合成で描く`,
+      `描画モード「${blendMode}」に対応していない。「通常」として合成する`,
     clippedElementsUngrouped:
-      "クリッピングレイヤーをグループとして合成しない設定には対応していない",
+      "クリッピングマスクをグループとして合成しない設定には対応していない",
     vectorMask: "ベクトルマスクは適用しない",
   },
   loadError: {
     /** The frame around a reason. `message` is already formatted, or came through raw */
     frame: (fileName: string, message: string) =>
       `⚠ ${fileName}を読み込めなかった: ${message}`,
-    workerError: "Workerでエラーが起きた",
+    workerError: "読み込み中にエラーが起きた",
     memoryLimit: "PSDが大きすぎて読み込めない",
     edge: (edge: number, limit: number) =>
-      `画像の長辺が${edge}pxで、上限の${limit}pxを超えている`,
+      `ドキュメントの長辺が${edge}pxで、上限の${limit}pxを超えている`,
     area: (area: number, limit: number) =>
-      `画像の面積が${area.toLocaleString()}pxで、上限の${limit.toLocaleString()}pxを超えている`,
+      `ドキュメントの面積が${area.toLocaleString()}pxで、上限の${limit.toLocaleString()}pxを超えている`,
     bitsPerChannel: (bitsPerChannel: number) =>
       `${bitsPerChannel}bit/チャンネルのPSDには対応していない（8bitのみ）`,
   },
