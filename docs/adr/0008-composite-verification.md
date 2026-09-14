@@ -7,26 +7,33 @@ date: 2026-09-14
 
 ## Context
 
-[ADR-0002](0002-blend-mode-mapping.md) ranked "matching what Photoshop shows" second among its criteria and **had no way to check it.** The blend mode table was written from documentation, and `blendMode.test.ts` deliberately refuses to assert the mapping, because the expected values would come from the same place the table does. The spec's side-by-side comparison against Alpaca Studio is what was supposed to settle it, and [issue #20](https://github.com/nymch/psd-render-viewer/issues/20) records that nothing is behind it.
+[ADR-0002](0002-blend-mode-mapping.md) ranked "matching what Photoshop shows" second among its criteria and did check it — by eye, against real PSDs opened beside Photoshop. That is where `linear dodge` → `lighter` came from, along with the five-condition table recording where the two agree.
 
-Two things block that comparison. **The fixtures do not exist**, and the obvious ones cannot be committed: real files run 120-170MB and are client material. **The comparison itself has no mechanism** — nothing takes two renders and says how they differ.
+**What it had no way to do was repeat the check.** Nothing records which files were compared or reproduces the result, and `blendMode.test.ts` asserts the ten unsupported modes without asserting the seventeen that map, because their expected values would come from the same table they are meant to test. So the gap is not that correctness was never examined. It is that **the examination cannot be run again, does not scale past a handful of layers, and no longer has the renderer it was run against** — Photoshop is not available here any more.
+
+**The reference from here is Alpaca Studio.** The spec settled that at [psd-viewer-v1.md:329](../design/psd-viewer-v1.md) for the same reason and accepted the cost: a blend mode where Alpaca and Photoshop disagree is missed. That cost is judged small — the two render far closer to each other than either does to GIMP or Paint.NET — which makes Alpaca a workable stand-in rather than merely the only thing left.
+
+Two things block the comparison. **The fixtures do not exist**, and the obvious ones cannot be committed: real files run 120-170MB and are client material. **The comparison itself has no mechanism** — nothing takes two renders and says how they differ.
 
 The scope is everything outside the app: how fixtures are obtained, how a comparison is run, and what a report may contain. No file under `lib/`, `components/`, `hooks/`, or `atoms/` changes.
 
 ## Decision criteria
 
-1. **A report has to reach the cause.** "The images differ by 3%" cannot be acted on. "Layer 4, a multiply layer inside a pass-through group, accounts for the difference" can. This ranks first because the comparison exists to find defects, not to produce a score
-2. **One person can maintain it.** What is being added is test infrastructure, and infrastructure nobody can repair is worse than none
-3. **It can be thrown away.** If the approach turns out wrong, nothing in the app should have to be unpicked
-4. **Neither rights nor confidentiality leak.** Ranked fourth *now*, and it rises — see the migration rule below. [ADR-0002](0002-blend-mode-mapping.md) set the precedent for a criterion whose rank is explicitly conditional on a later change
+1. **The method has to reach the cause.** "The images differ by 3%" cannot be acted on. "Layer 4, a multiply layer inside a pass-through group, accounts for the difference" can. This ranks first because verification exists to find defects, not to produce a score. It is worded as *method* rather than *report* deliberately: by eye is a method that reaches the cause on a small document, and a criterion phrased around producing a report would have eliminated it by definition instead of on merit
+2. **It has to be repeatable.** The check ADR-0002 ran cannot be run again, which is the specific failure this decision exists to fix
+3. **One person can maintain it.** What is being added is test infrastructure, and infrastructure nobody can repair is worse than none
+4. **It can be thrown away.** If the approach turns out wrong, nothing in the app should have to be unpicked
+5. **Neither rights nor confidentiality leak.** Ranked last *now*, and it rises — see the migration rule below. [ADR-0002](0002-blend-mode-mapping.md) set the precedent for a criterion whose rank is explicitly conditional on a later change
 
 ### The migration rule
 
-Ranking confidentiality fourth today would be indefensible as a permanent position. It is not one.
+Ranking confidentiality last today would be indefensible as a permanent position. It is not one.
 
 **Real files are the medium of discovery; generated fixtures are the medium of regression.** A difference found with a real file is translated into a generated fixture that reproduces it, and at that point the real file is no longer needed *for that phenomenon*. The trigger is per-phenomenon, not a date and not a project stage, so the dependency on real material falls one finding at a time rather than waiting on a milestone that never quite arrives.
 
 This is the shape [testing.md](../../.claude/rules/testing.md) already requires of unit tests — a bug gets a test that reproduces it, written first. The rule here extends it to compositing.
+
+**Some phenomena will not migrate, and the rule has to say so rather than pretend otherwise.** `writePsd` cannot express everything Photoshop writes — it cannot produce a layer with an absent name, which is what [issue #30](https://github.com/nymch/psd-render-viewer/issues/30) was about. When a difference depends on a structure that cannot be generated, the phenomenon stays tied to a real file permanently. Those cases are recorded as such, with what could not be expressed, so the residue is a known list rather than a slow leak of exceptions.
 
 **Which generated fixtures are needed is a question about the real corpus, not a fixed list.** The files on hand are thought to span masks, `linear dodge`, groups, and a range of layer counts, which would cover much of the matrix on their own. That belief is checkable by the same metadata the report uses: parsing the corpus and tabulating blend modes, mask presence, nesting depth, layer counts, and `unsupported` kinds produces a coverage inventory. It needs no reference render and no comparison — only a parse — so it is the cheapest thing here to run first, and its output is already in the shareable form.
 
@@ -37,11 +44,23 @@ This is the shape [testing.md](../../.claude/rules/testing.md) already requires 
 - **Drive the real app in a browser, diff against a reference render, attribute per layer.** Playwright opens the running app, the composited canvas is read back with `getImageData`, and the difference is attributed to layers using the metadata `buildLayerTree` already produces
 - **Commit hand-authored Photoshop fixtures as binaries**, with their expected PNGs, and compare the same way. Content authored in Photoshop by the project — rectangles and gradients — carries no third-party rights
 - **Render headlessly with a Node canvas** (`node-canvas`, `skia-canvas`) and skip the browser
+- **Compare only against this repository's own previous render.** No reference renderer, no export, no threshold
+- **Decide after the coverage inventory.** Tabulate what the files on hand contain, and pick a mechanism once the shape of the problem is known
 - **Do not build it.** Keep comparing by eye, two windows side by side
 
 ### Rendering in Node does not compare anything
 
 `lib/psd/composite.ts` delegates blending to `globalCompositeOperation`, so **the blend math belongs to the browser, not to this repository.** A Node canvas is a different implementation of that math. When its output disagreed with Alpaca Studio, nothing would say whether this code, the polyfill, or the mapping table was at fault — and the mapping table is the thing under test. It is rejected for failing criterion 1 outright, not for being slow or awkward.
+
+### Regression-only is the cheapest thing that works, and does not answer the question
+
+Comparing a render against this repository's own previous render needs no reference renderer, no export settings, and no tolerance — the measurement below puts its threshold at zero. It would catch any change in rendering, it can run unattended, and it sidesteps every open question about Alpaca Studio.
+
+It is rejected as the *decision* because it can only detect change, never error. A composite that has been wrong since the day it was written stays wrong and stays silent, and ADR-0002's ten unsupported modes and the `linear dodge` alpha divergence are exactly that class of defect. **It is adopted as a component instead**: the regression comparison is the part that automates now, and the reference comparison is the part that says whether the baseline deserved to be trusted.
+
+### Deciding after the inventory postpones nothing that matters
+
+The coverage inventory comes first either way, and it is cheap enough that nothing rides on sequencing it. What deciding later would buy is knowing the corpus before picking a mechanism; what it costs is that the inventory itself is the first consumer of the metadata schema this decision fixes. Choosing the report shape now is what makes the inventory more than a one-off script.
 
 ### The case for not building it
 
@@ -51,7 +70,11 @@ It is rejected because it does not survive scale. Judging a 70-layer composite b
 
 ## Decision
 
-**Drive the real app in a browser, diff against a reference render, and attribute the difference to layers.** It is the only option that satisfies criterion 1: the browser is where the blending actually happens, so a disagreement is a disagreement about this repository's code rather than about a substitute renderer.
+**Drive the real app in a browser, diff against a reference render, and attribute the difference to layers.**
+
+By eye and regression-only both reach the cause too, so criterion 1 does not separate them; **criterion 2 does.** By eye cannot be re-run, which is the failure being fixed, and regression-only re-runs perfectly while comparing against a baseline nobody has checked. This option is the only one that is both repeatable and capable of finding an error rather than a change.
+
+Rendering in Node would satisfy both and still fail criterion 1, because the browser is where the blending actually happens: a disagreement there is a disagreement about this repository's code rather than about a substitute renderer.
 
 Four things were confirmed by building it rather than assumed.
 
@@ -85,11 +108,13 @@ The asymmetry is the useful result. Regression detection is exact and can be aut
 ### Consequences
 
 - Good: a failing comparison names a layer and its treatment, instead of producing a score
-- Good: regression detection needs no tolerance, so a change in rendering cannot hide under a threshold
-- Good: reports are shareable as they stand, which keeps the verification record in the repository even when the input was a client file
+- Good: regression detection needs no tolerance **at the sizes measured**, so a change in rendering cannot hide under a threshold. The measurement covers small canvases only, and the zero is a finding about those — see Unconfirmed
+- Good: reports carry no artwork, so a run against a client file leaves a record that can be kept
 - Good: the fixture migration has a trigger that can actually fire, rather than an intention to tidy up later
 - Bad: **this brings in Playwright ahead of the plan.** [testing.md](../../.claude/rules/testing.md) records E2E as not set up and the spec puts it out of scope for v1. The comparison also needs a dev server running, so it is not a plain `npm test`
 - Bad: attribution by rectangle is approximate. A layer's rectangle includes its transparent parts, and overlapping layers all show a difference that only one of them caused. Ablation — rendering once per hidden layer to get each layer's true contribution — would fix it at N+1 renders and a code path that bypasses the read-only panel, and is deliberately deferred
+- Bad: **criterion 4 holds only for the approximate version.** Nothing in the app changes while attribution is by rectangle, but ablation needs a way to hide a layer, which the read-only panel does not offer. If rectangle attribution proves unreadable at seventy layers — which Unconfirmed rates as likely enough to name — the cheap exit disappears with it
+- Bad: a report keyed by index is reproducible only while the PSD is unchanged, and a report of a run against a client file cannot be re-derived by anyone who lacks that file. Committing one preserves the finding, not the ability to check it
 - Bad: differences propagate upward through the stack, so the topmost layer showing a difference is usually not the cause. **Read a report from the bottom up.** This is a convention, not something the tool enforces
 - Bad: the layer index is stable only within one file. Adding a layer and re-exporting shifts every index after it, so reports do not survive an edit to the PSD
 - Bad: a report still describes structure — layer count, depth, the distribution of blend modes. No artwork leaks, but it is not perfectly colorless
@@ -98,6 +123,7 @@ The asymmetry is the useful result. Regression detection is exact and can be aut
 ### Unconfirmed
 
 - **Everything involving Alpaca Studio.** No export has been obtained, so its color management, alpha handling, and export settings are unknown. If it applies an ICC profile the browser canvas does not, the noise floor could be large enough to swamp real differences, and the comparison would need color conversion before it means anything
+- **That Alpaca Studio is close enough to Photoshop to stand in for it.** The judgment is that the two are far nearer each other than either is to GIMP or Paint.NET, which is an assessment from use, not a measurement — and with Photoshop unavailable it cannot be turned into one here. Every finding this produces inherits it: a difference against Alpaca is evidence about Photoshop only as far as that closeness holds, and the modes where it is likeliest to fail are the ones ADR-0002 already marks unsupported
 - **Determinism was measured on two small generated PSDs, in one Chromium build, on one machine.** A 100MB-class file, a different browser, or GPU-accelerated compositing could all break the zero. If it does, the regression threshold stops being zero and needs the same calibration as the reference comparison
 - **Whether rectangle attribution is precise enough on a real file.** It was demonstrated on five layers with disjoint rectangles. Seventy overlapping layers is the case that matters and has not been tried; if it proves unreadable, ablation stops being optional
 - **Whether the files on hand cover the matrix.** The plan leans on them for discovery, on the understanding that they vary in masks, `linear dodge`, grouping, and layer count. Nobody has tabulated it. The coverage inventory settles it cheaply, and if the corpus turns out narrower than believed — all one depth, say, or no clipping masks anywhere — more has to be generated up front and the discovery phase covers less than this decision assumes
