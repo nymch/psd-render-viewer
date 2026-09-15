@@ -4,15 +4,17 @@
  * ADR-0008 decides the shape: one script, two modes. Everything after reading the pixels is
  * shared; only where the baseline comes from differs.
  *
- *   regression — the baseline is a previous run of this script. Threshold is zero
- *   reference  — the baseline is an Alpaca Studio export. Threshold has to be calibrated
+ *   regression — the baseline is a previous run of this script, stored as tile summaries rather
+ *                than as an image. Threshold is zero, so any changed tile is a real change
+ *   reference  — the baseline is an Alpaca Studio export. Per-pixel, threshold to be calibrated
  *
  * **The diff runs inside the browser and only statistics come back.** A 4200x3600 composite is
  * 60MB of RGBA; serialising that to Node per run would dominate the cost, and the report needs
  * none of it.
  *
- * **The report carries no artwork, no layer names, and no rectangles** — layers are identified
- * by the index `buildLayerTree` assigns, so a run against a client file can be shared.
+ * **Nothing this writes can be restored as an image.** A baseline holds a hash and four mean
+ * channel values per 64x64 tile; reports hold statistics, and layers are identified by the index
+ * `buildLayerTree` assigns rather than by name or rectangle.
  *
  *   node scripts/compare.mjs <psd> --save-baseline out.json
  *   node scripts/compare.mjs <psd> --baseline out.json
@@ -122,13 +124,16 @@ function readLayers(path) {
   };
 }
 
+/** Tiles are what a baseline is made of. See `summarise` in the page function below */
+const TILE = 64;
+
 /**
  * Opens the PSD in the app, then diffs and attributes without taking the pixels out.
  *
- * `baselinePng` is a data URL or null. With null the composite is returned as a PNG data URL so
- * it can be stored as a baseline, and no comparison is made.
+ * `baseline` is `{kind: "tiles", tiles}` for a regression run, `{kind: "png", dataUrl}` for a
+ * reference run, or null to capture a new baseline.
  */
-async function runInPage(page, psdPath, layers, threshold, baselinePng) {
+async function runInPage(page, psdPath, layers, threshold, baseline) {
   // The server answering is not the same as the app being ready. Selecting a file before React
   // hydrates drops it silently, which is what happens when this is run straight after `npm run
   // dev`, so the first attempt is given a short leash and retried once
@@ -142,7 +147,7 @@ async function runInPage(page, psdPath, layers, threshold, baselinePng) {
   }
 
   return page.evaluate(
-    async ({layers, threshold, baselinePng}) => {
+    async ({layers, threshold, baseline, TILE}) => {
       const canvas = document.querySelector("canvas");
       const ctx = canvas.getContext("2d", {willReadFrequently: true});
       const width = canvas.width;
@@ -154,12 +159,140 @@ async function runInPage(page, psdPath, layers, threshold, baselinePng) {
         ? Number(badge.textContent.replace(/\D/g, ""))
         : 0;
 
-      if (baselinePng === null) {
+      /**
+       * Reduces the composite to one hash and one mean colour per tile.
+       *
+       * **A baseline must not be restorable as an image.** A 64x64 tile is 4096 pixels reduced
+       * to four averages and a hash, so the picture cannot be recovered from it — the reduction
+       * is what makes a baseline safe to keep, and the tile size is a privacy parameter before
+       * it is a performance one. A per-pixel hash would be trivially invertible.
+       *
+       * The hash answers "did this tile change at all", which is what a threshold of zero needs.
+       * The means answer "by how much", which matters if the zero ever stops holding — it was
+       * measured on a 200x150 canvas and real documents are far larger.
+       */
+      const summarise = (data) => {
+        const across = Math.ceil(width / TILE);
+        const down = Math.ceil(height / TILE);
+        const tiles = [];
+        for (let ty = 0; ty < down; ty++) {
+          for (let tx = 0; tx < across; tx++) {
+            const x0 = tx * TILE;
+            const y0 = ty * TILE;
+            const x1 = Math.min(width, x0 + TILE);
+            const y1 = Math.min(height, y0 + TILE);
+            // Two FNV-1a passes with different offsets, so a collision needs both to agree
+            let h1 = 0x811c9dc5;
+            let h2 = 0x01000193;
+            let r = 0;
+            let g = 0;
+            let b = 0;
+            let a = 0;
+            let n = 0;
+            for (let y = y0; y < y1; y++) {
+              for (let x = x0; x < x1; x++) {
+                const p = (y * width + x) * 4;
+                for (let ch = 0; ch < 4; ch++) {
+                  const v = data[p + ch];
+                  h1 = Math.imul(h1 ^ v, 0x01000193) >>> 0;
+                  h2 = Math.imul(h2 ^ (v + ch), 0x85ebca6b) >>> 0;
+                }
+                r += data[p];
+                g += data[p + 1];
+                b += data[p + 2];
+                a += data[p + 3];
+                n++;
+              }
+            }
+            tiles.push({
+              x: x0,
+              y: y0,
+              h: `${h1.toString(16)}${h2.toString(16)}`,
+              m: [r / n, g / n, b / n, a / n].map((v) => +v.toFixed(3)),
+            });
+          }
+        }
+        return tiles;
+      };
+
+      if (baseline === null) {
         return {
           width,
           height,
           shownUnsupported,
-          composite: canvas.toDataURL("image/png"),
+          tiles: summarise(ctx.getImageData(0, 0, width, height).data),
+        };
+      }
+
+      if (baseline.kind === "tiles") {
+        const now = summarise(ctx.getImageData(0, 0, width, height).data);
+        const before = new Map(baseline.tiles.map((t) => [`${t.x},${t.y}`, t]));
+        if (before.size !== now.length) {
+          return {
+            width,
+            height,
+            shownUnsupported,
+            sizeMismatch: {expected: {tiles: before.size}, got: {tiles: now.length}},
+          };
+        }
+
+        const changed = [];
+        let worstMeanDelta = 0;
+        for (const tile of now) {
+          const was = before.get(`${tile.x},${tile.y}`);
+          if (was === undefined || was.h === tile.h) continue;
+          const delta = Math.max(...tile.m.map((v, i) => Math.abs(v - was.m[i])));
+          worstMeanDelta = Math.max(worstMeanDelta, delta);
+          changed.push({x: tile.x, y: tile.y, meanDelta: +delta.toFixed(3)});
+        }
+
+        // Attribution is by tile here, which is coarser than the reference mode's per-pixel map
+        const overlaps = (bounds, tile) =>
+          tile.x < bounds.right &&
+          tile.x + TILE > bounds.left &&
+          tile.y < bounds.bottom &&
+          tile.y + TILE > bounds.top;
+
+        const perLayer = layers.map((layer) => {
+          const hit = changed.filter((t) => overlaps(layer.bounds, t));
+          // The denominator is how many tiles the bounds actually touch. A layer rarely lands on
+          // the grid, so dividing its size by the tile size undercounts and the share overshoots
+          const {left, top, right, bottom} = layer.bounds;
+          const l = Math.max(0, Math.min(width - 1, left));
+          const t = Math.max(0, Math.min(height - 1, top));
+          const r = Math.max(l + 1, Math.min(width, right));
+          const b = Math.max(t + 1, Math.min(height, bottom));
+          const tilesInLayer =
+            (Math.floor((r - 1) / TILE) - Math.floor(l / TILE) + 1) *
+            (Math.floor((b - 1) / TILE) - Math.floor(t / TILE) + 1);
+          return {
+            index: layer.index,
+            depth: layer.depth,
+            kind: layer.kind,
+            blendMode: layer.blendMode,
+            opacity: layer.opacity,
+            clipping: layer.clipping,
+            visible: layer.visible,
+            hasMask: layer.hasMask,
+            unsupported: layer.unsupported,
+            shareOfRegion: +((hit.length / tilesInLayer) * 100).toFixed(2),
+            shareOfAllDifference:
+              changed.length === 0
+                ? 0
+                : +((hit.length / changed.length) * 100).toFixed(2),
+          };
+        });
+
+        return {
+          width,
+          height,
+          shownUnsupported,
+          granularity: `tile-${TILE}`,
+          tiles: now.length,
+          changedTiles: changed.length,
+          percentTilesChanged: +((changed.length / now.length) * 100).toFixed(4),
+          worstTileMeanDelta: +worstMeanDelta.toFixed(3),
+          perLayer,
         };
       }
 
@@ -167,7 +300,7 @@ async function runInPage(page, psdPath, layers, threshold, baselinePng) {
         const image = new Image();
         image.onload = () => resolve(image);
         image.onerror = () => reject(new Error("the baseline image did not decode"));
-        image.src = baselinePng;
+        image.src = baseline.dataUrl;
       });
       if (expected.width !== width || expected.height !== height) {
         return {
@@ -271,7 +404,7 @@ async function runInPage(page, psdPath, layers, threshold, baselinePng) {
         perLayer,
       };
     },
-    {layers, threshold, baselinePng},
+    {layers, threshold, baseline, TILE},
   );
 }
 
@@ -302,14 +435,24 @@ if (saveBaselinePath !== null) refuseIfCommittable(saveBaselinePath);
 
 const document_ = readLayers(psdPath);
 
-let baselinePng = null;
+let baseline = null;
 let mode = "capture";
 if (expectedPath !== null) {
   mode = "reference";
-  baselinePng = `data:image/png;base64,${readFileSync(expectedPath).toString("base64")}`;
+  baseline = {
+    kind: "png",
+    dataUrl: `data:image/png;base64,${readFileSync(expectedPath).toString("base64")}`,
+  };
 } else if (baselinePath !== null) {
   mode = "regression";
-  baselinePng = JSON.parse(readFileSync(baselinePath, "utf8")).composite;
+  const stored = JSON.parse(readFileSync(baselinePath, "utf8"));
+  if (stored.tiles === undefined) {
+    console.error(
+      `${baselinePath} is not a tile baseline. Baselines written before this change stored the composited image itself; delete it and capture a new one with --save-baseline`,
+    );
+    process.exit(1);
+  }
+  baseline = {kind: "tiles", tiles: stored.tiles};
 }
 
 const browser = await chromium.launch();
@@ -331,7 +474,7 @@ const result = await runInPage(
   psdPath,
   document_.layers,
   threshold,
-  baselinePng,
+  baseline,
 );
 await browser.close();
 
@@ -387,7 +530,8 @@ if (mode === "capture") {
         width: result.width,
         height: result.height,
         capturedAt: new Date().toISOString(),
-        composite: result.composite,
+        tileSize: TILE,
+        tiles: result.tiles,
       },
       null,
       2,
@@ -423,7 +567,6 @@ const report = {
   consoleErrors,
   ...result,
 };
-delete report.composite;
 delete report.shownUnsupported;
 
 const json = JSON.stringify(report, null, 2);
@@ -447,7 +590,17 @@ if (!report.unsupportedCount.agree) {
   );
 }
 
-console.error(
-  `\n${report.differingPixels} of ${report.pixels} pixels differ (${report.percentDiffering}%). ` +
-    `${report.unexplained} of those are not inside a layer already marked unsupported.`,
-);
+// The two modes measure different things, so they cannot share one summary
+if (mode === "regression") {
+  console.error(
+    report.changedTiles === 0
+      ? `\nnothing changed: 0 of ${report.tiles} tiles differ from the baseline.`
+      : `\n${report.changedTiles} of ${report.tiles} tiles changed (${report.percentTilesChanged}%), ` +
+          `the worst by ${report.worstTileMeanDelta} in mean channel value. Any change at all is a real change.`,
+  );
+} else {
+  console.error(
+    `\n${report.differingPixels} of ${report.pixels} pixels differ (${report.percentDiffering}%). ` +
+      `${report.unexplained} of those are not inside a layer already marked unsupported.`,
+  );
+}

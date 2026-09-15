@@ -48,15 +48,24 @@ node scripts/compare.mjs file.psd --baseline verification/base.json --out report
 node scripts/compare.mjs file.psd --expected export.png --threshold 2 --out report.json
 ```
 
-### A baseline is the artwork. A report is not
+### Nothing written to disk can be restored as an image
 
-**`--save-baseline` writes the composited image itself**, as a PNG inside the JSON. For a client
-file that is the picture, so a baseline is a local working file: never committed, never shared.
-`verification/` is gitignored for this, and writing a baseline anywhere inside the repository that
-git would track is refused rather than warned about.
+A baseline is **not** the composite. It is a grid of 64×64 tiles, each reduced to a hash and four
+mean channel values — 4096 pixels become five numbers, so the picture cannot be recovered from it.
+The tile size is a privacy parameter before it is a performance one: a per-pixel hash would be
+trivially invertible, a per-tile hash is not.
 
-A report is the opposite and is built to be shared: no artwork, no layer names, no rectangles.
-Files appear as a hash of their contents, layers as the index `buildLayerTree` assigns.
+- The **hash** answers "did this tile change at all", which is what a threshold of zero needs
+- The **means** answer "by how much", which matters if the zero stops holding. It was measured on
+  a 200×150 canvas and real documents are far larger
+
+Reports carry no artwork either: no layer names, no rectangles. Files appear as a hash of their
+contents, layers as the index `buildLayerTree` assigns.
+
+Pixels are read only inside the browser page, where the diff runs. Only statistics cross back.
+
+Baselines written before this — which did store the composited image — are refused rather than
+misread. Delete one and capture it again.
 
 | Flag | Meaning |
 | --- | --- |
@@ -102,7 +111,10 @@ A size mismatch is reported and exits non-zero rather than comparing the wrong p
 }
 ```
 
-- **`unexplained` is the number that matters.** A difference inside a layer already marked
+Regression runs report at tile granularity instead: `changedTiles`, `percentTilesChanged`, and
+`worstTileMeanDelta`. Any changed tile is a real change, since the threshold there is zero.
+
+- **`unexplained` is the number that matters** (reference runs). A difference inside a layer already marked
   unsupported is expected — ADR-0002 says that layer cannot be reproduced. A difference anywhere
   else is what earns a look. It means "not accounted for by this app's known gaps", not "this app
   is wrong": it may still belong to the reference renderer or to whatever wrote the PSD
