@@ -44,7 +44,7 @@ node scripts/compare.mjs file.psd --save-baseline verification/base.json
 # Regression: did the composite change since that baseline? Threshold is 0
 node scripts/compare.mjs file.psd --baseline verification/base.json --out report.json
 
-# Reference: does the composite match an Alpaca Studio export?
+# Reference: does the composite match an FireAlpaca export?
 node scripts/compare.mjs file.psd --expected export.png --threshold 2 --out report.json
 ```
 
@@ -71,16 +71,27 @@ misread. Delete one and capture it again.
 | --- | --- |
 | `--save-baseline <json>` | Render and store, comparing nothing |
 | `--baseline <json>` | Compare against a stored render |
-| `--expected <png>` | Compare against a reference export |
+| `--expected <png>` | Compare against a lossless reference export |
+| `--expected-lossy <jpg>` | Compare against a lossy reference, by tile mean against a measured JPEG floor |
+| `--background <color>` | What to flatten our composite onto before a lossy comparison. Default `#ffffff` |
+| `--jpeg-quality <q>` | Quality the noise floor is measured at. Default 0.9; match the reference if known |
+| `--margin <n>` | A tile counts as differing when its delta exceeds its own floor by this factor. Default 2 |
+| `--allow-scale` | Compare in the reference's dimensions when it is not the document size |
 | `--threshold <n>` | A pixel counts as differing when any channel is off by more than this. Default 0 |
 | `--out <json>` | Write the report to a file instead of stdout |
 | `--url <url>` | Where the dev server is. Default `http://localhost:3000` |
 
-### Exporting from Alpaca Studio
+### Exporting from FireAlpaca
 
 **The export settings are part of the baseline.** ADR-0008 pins them, because an expected image
 made under settings nobody recorded is one afternoon's output rather than something to compare
 against.
+
+**FireAlpaca has ten blend modes**, against the 27 a PSD can carry and the 17 this app maps. A
+file using `linear dodge`, `soft light`, `hard light`, or any of the non-separable modes is being
+compared against a renderer that does not have them, and the difference is the reference's, not
+ours. Check what a file actually uses — `inventory.mjs` lists it — before reading anything into a
+comparison.
 
 | Setting | Required |
 | --- | --- |

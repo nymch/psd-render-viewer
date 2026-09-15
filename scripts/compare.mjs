@@ -1,12 +1,14 @@
 /**
  * Compares the app's composite against a baseline and attributes the difference to layers.
  *
- * ADR-0008 decides the shape: one script, two modes. Everything after reading the pixels is
+ * ADR-0008 decides the shape: one script, several modes. Everything after reading the pixels is
  * shared; only where the baseline comes from differs.
  *
- *   regression — the baseline is a previous run of this script, stored as tile summaries rather
- *                than as an image. Threshold is zero, so any changed tile is a real change
- *   reference  — the baseline is an Alpaca Studio export. Per-pixel, threshold to be calibrated
+ *   regression — a previous run of this script, stored as tile summaries rather than as an
+ *                image. Threshold is zero, so any changed tile is a real change
+ *   reference  — a lossless export from another renderer. Per-pixel, threshold to be calibrated
+ *   lossy      — an image the author distributed as the correct result, usually a JPEG. Compared
+ *                by tile mean, against a JPEG noise floor measured from our own render each run
  *
  * **The diff runs inside the browser and only statistics come back.** A 4200x3600 composite is
  * 60MB of RGBA; serialising that to Node per run would dominate the cost, and the report needs
@@ -18,7 +20,8 @@
  *
  *   node scripts/compare.mjs <psd> --save-baseline out.json
  *   node scripts/compare.mjs <psd> --baseline out.json
- *   node scripts/compare.mjs <psd> --expected alpaca-export.png --threshold 2
+ *   node scripts/compare.mjs <psd> --expected export.png --threshold 2
+ *   node scripts/compare.mjs <psd> --expected-lossy author.jpg --allow-scale
  *
  * Needs `npm run dev` running. Playwright's chromium must be installed once:
  *   npx playwright install chromium
@@ -296,12 +299,174 @@ async function runInPage(page, psdPath, layers, threshold, baseline) {
         };
       }
 
-      const expected = await new Promise((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => resolve(image);
-        image.onerror = () => reject(new Error("the baseline image did not decode"));
-        image.src = baseline.dataUrl;
-      });
+      const decode = (src) =>
+        new Promise((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = () => reject(new Error("an image did not decode"));
+          image.src = src;
+        });
+
+      if (baseline.kind === "lossy") {
+        const author = await decode(baseline.dataUrl);
+        const scaled = author.width !== width || author.height !== height;
+        if (scaled && !baseline.allowScale) {
+          return {
+            width,
+            height,
+            shownUnsupported,
+            sizeMismatch: {expected: {width: author.width, height: author.height}},
+          };
+        }
+        // Compare in the reference's own dimensions. Anything the scaling costs is absorbed by
+        // the floor below, which is measured on the same scaled surface
+        const w = author.width;
+        const h = author.height;
+
+        /**
+         * A JPEG has no alpha, so the author's image is already flat against something. Ours is
+         * not: the app composites onto a bare canvas. Without matching that background, every
+         * transparent pixel reads as a difference.
+         */
+        const flat = document.createElement("canvas");
+        flat.width = w;
+        flat.height = h;
+        const flatCtx = flat.getContext("2d", {willReadFrequently: true});
+        flatCtx.fillStyle = baseline.background;
+        flatCtx.fillRect(0, 0, w, h);
+        flatCtx.drawImage(canvas, 0, 0, w, h);
+
+        const tilesOf = (data, tw, th) => {
+          const across = Math.ceil(tw / TILE);
+          const down = Math.ceil(th / TILE);
+          const out = [];
+          for (let ty = 0; ty < down; ty++) {
+            for (let tx = 0; tx < across; tx++) {
+              const x0 = tx * TILE;
+              const y0 = ty * TILE;
+              const x1 = Math.min(tw, x0 + TILE);
+              const y1 = Math.min(th, y0 + TILE);
+              let r = 0, g = 0, b = 0, n = 0;
+              for (let y = y0; y < y1; y++) {
+                for (let x = x0; x < x1; x++) {
+                  const p = (y * tw + x) * 4;
+                  r += data[p];
+                  g += data[p + 1];
+                  b += data[p + 2];
+                  n++;
+                }
+              }
+              out.push({x: x0, y: y0, m: [r / n, g / n, b / n]});
+            }
+          }
+          return out;
+        };
+        const worst = (a, b) => Math.max(...a.m.map((v, i) => Math.abs(v - b.m[i])));
+
+        const ours = tilesOf(flatCtx.getImageData(0, 0, w, h).data, w, h);
+
+        const ref = document.createElement("canvas");
+        ref.width = w;
+        ref.height = h;
+        const refCtx = ref.getContext("2d", {willReadFrequently: true});
+        refCtx.drawImage(author, 0, 0);
+        const theirs = tilesOf(refCtx.getImageData(0, 0, w, h).data, w, h);
+
+        /**
+         * The floor, measured rather than guessed.
+         *
+         * Our own flattened render is pushed through JPEG at the same quality and read back.
+         * Whatever that round trip costs is what JPEG alone does to this picture, per tile, so a
+         * difference against the author's image only counts once it clears its own tile's floor.
+         * Detailed tiles get a high floor and flat ones a low one, which a fixed threshold
+         * cannot do.
+         */
+        const roundTripped = await decode(flat.toDataURL("image/jpeg", baseline.quality));
+        const rt = document.createElement("canvas");
+        rt.width = w;
+        rt.height = h;
+        const rtCtx = rt.getContext("2d", {willReadFrequently: true});
+        rtCtx.drawImage(roundTripped, 0, 0);
+        const floorTiles = tilesOf(rtCtx.getImageData(0, 0, w, h).data, w, h);
+
+        const changed = [];
+        let worstDelta = 0;
+        let worstFloor = 0;
+        const floors = [];
+        for (let i = 0; i < ours.length; i++) {
+          const delta = worst(ours[i], theirs[i]);
+          const floor = worst(ours[i], floorTiles[i]);
+          floors.push(floor);
+          worstDelta = Math.max(worstDelta, delta);
+          worstFloor = Math.max(worstFloor, floor);
+          if (delta > Math.max(floor * baseline.margin, 0.5)) {
+            changed.push({
+              x: ours[i].x,
+              y: ours[i].y,
+              delta: +delta.toFixed(3),
+              floor: +floor.toFixed(3),
+            });
+          }
+        }
+        floors.sort((a, b) => a - b);
+
+        // Layer rectangles are in document coordinates; the comparison may be in the
+        // reference's, so they are scaled to match before anything is attributed
+        const sx = w / width;
+        const sy = h / height;
+        const overlaps = (bounds, tile) =>
+          tile.x < bounds.right * sx &&
+          tile.x + TILE > bounds.left * sx &&
+          tile.y < bounds.bottom * sy &&
+          tile.y + TILE > bounds.top * sy;
+
+        const perLayer = layers.map((layer) => {
+          const hit = changed.filter((t) => overlaps(layer.bounds, t));
+          const l = Math.max(0, Math.min(w - 1, layer.bounds.left * sx));
+          const t = Math.max(0, Math.min(h - 1, layer.bounds.top * sy));
+          const r = Math.max(l + 1, Math.min(w, layer.bounds.right * sx));
+          const b = Math.max(t + 1, Math.min(h, layer.bounds.bottom * sy));
+          const tilesInLayer =
+            (Math.floor((r - 1) / TILE) - Math.floor(l / TILE) + 1) *
+            (Math.floor((b - 1) / TILE) - Math.floor(t / TILE) + 1);
+          return {
+            index: layer.index,
+            depth: layer.depth,
+            kind: layer.kind,
+            blendMode: layer.blendMode,
+            opacity: layer.opacity,
+            clipping: layer.clipping,
+            visible: layer.visible,
+            hasMask: layer.hasMask,
+            unsupported: layer.unsupported,
+            shareOfRegion: +((hit.length / tilesInLayer) * 100).toFixed(2),
+            shareOfAllDifference:
+              changed.length === 0
+                ? 0
+                : +((hit.length / changed.length) * 100).toFixed(2),
+          };
+        });
+
+        return {
+          width,
+          height,
+          shownUnsupported,
+          granularity: `tile-${TILE}`,
+          comparedAt: {width: w, height: h, scaled},
+          background: baseline.background,
+          jpegQuality: baseline.quality,
+          margin: baseline.margin,
+          tiles: ours.length,
+          tilesExceedingFloor: changed.length,
+          percentExceedingFloor: +((changed.length / ours.length) * 100).toFixed(4),
+          worstTileDelta: +worstDelta.toFixed(3),
+          worstTileFloor: +worstFloor.toFixed(3),
+          medianTileFloor: +floors[Math.floor(floors.length / 2)].toFixed(3),
+          perLayer,
+        };
+      }
+
+      const expected = await decode(baseline.dataUrl);
       if (expected.width !== width || expected.height !== height) {
         return {
           width,
@@ -417,7 +582,9 @@ const flag = (name) => {
 
 if (psdPath === undefined) {
   console.error(
-    "usage: node scripts/compare.mjs <psd> [--expected png | --baseline json | --save-baseline json] [--threshold N] [--url http://localhost:3000] [--out report.json]",
+    "usage: node scripts/compare.mjs <psd> [--expected png | --expected-lossy jpg | --baseline json | --save-baseline json]\n" +
+      "       [--threshold N] [--background #ffffff] [--jpeg-quality 0.9] [--margin 2] [--allow-scale]\n" +
+      "       [--url http://localhost:3000] [--out report.json]",
   );
   process.exit(1);
 }
@@ -425,6 +592,11 @@ if (psdPath === undefined) {
 const threshold = Number(flag("threshold") ?? 0);
 const url = flag("url") ?? "http://localhost:3000";
 const expectedPath = flag("expected");
+const lossyPath = flag("expected-lossy");
+const background = flag("background") ?? "#ffffff";
+const jpegQuality = Number(flag("jpeg-quality") ?? 0.9);
+const margin = Number(flag("margin") ?? 2);
+const allowScale = args.includes("--allow-scale");
 const baselinePath = flag("baseline");
 const saveBaselinePath = flag("save-baseline");
 const outPath = flag("out");
@@ -437,7 +609,17 @@ const document_ = readLayers(psdPath);
 
 let baseline = null;
 let mode = "capture";
-if (expectedPath !== null) {
+if (lossyPath !== null) {
+  mode = "lossy";
+  baseline = {
+    kind: "lossy",
+    dataUrl: `data:image/jpeg;base64,${readFileSync(lossyPath).toString("base64")}`,
+    background,
+    quality: jpegQuality,
+    margin,
+    allowScale,
+  };
+} else if (expectedPath !== null) {
   mode = "reference";
   baseline = {
     kind: "png",
@@ -579,7 +761,7 @@ if (outPath !== null) {
 
 if (report.sizeMismatch !== undefined) {
   console.error(
-    `\nthe baseline is ${report.sizeMismatch.expected.width}x${report.sizeMismatch.expected.height} but the composite is ${result.width}x${result.height}. Export at 100%, exactly the document size (ADR-0008)`,
+    `\nthe reference is ${report.sizeMismatch.expected.width}x${report.sizeMismatch.expected.height} but the composite is ${result.width}x${result.height}. Export at 100%, or pass --allow-scale to compare in the reference\u2019s dimensions`,
   );
   process.exit(1);
 }
@@ -591,7 +773,14 @@ if (!report.unsupportedCount.agree) {
 }
 
 // The two modes measure different things, so they cannot share one summary
-if (mode === "regression") {
+if (mode === "lossy") {
+  console.error(
+    `\n${report.tilesExceedingFloor} of ${report.tiles} tiles differ beyond what JPEG alone explains ` +
+      `(${report.percentExceedingFloor}%).\n` +
+      `worst tile delta ${report.worstTileDelta}, against a median JPEG floor of ${report.medianTileFloor} ` +
+      `(worst floor ${report.worstTileFloor}) at quality ${report.jpegQuality}.`,
+  );
+} else if (mode === "regression") {
   console.error(
     report.changedTiles === 0
       ? `\nnothing changed: 0 of ${report.tiles} tiles differ from the baseline.`
