@@ -25,8 +25,10 @@
 *.pem
 
 # verification output. A baseline embeds the composited image, so it is the artwork itself and
-# must not be committed. Reports carry no artwork, but they live here too so one rule covers both
+# must not be committed. Reports carry no artwork, but they sit beside baselines and are working
+# data rather than source, so the directories are ignored whole
 /verification/
+/reports/
 *.baseline.json
 baseline*.json
 
