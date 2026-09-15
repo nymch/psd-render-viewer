@@ -24,6 +24,12 @@
 .DS_Store
 *.pem
 
+# verification output. A baseline embeds the composited image, so it is the artwork itself and
+# must not be committed. Reports carry no artwork, but they live here too so one rule covers both
+/verification/
+*.baseline.json
+baseline*.json
+
 # debug
 npm-debug.log*
 yarn-debug.log*

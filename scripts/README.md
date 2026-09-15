@@ -39,14 +39,24 @@ installed once with `npx playwright install chromium`.
 
 ```bash
 # Store this render as the baseline
-node scripts/compare.mjs file.psd --save-baseline baseline.json
+node scripts/compare.mjs file.psd --save-baseline verification/base.json
 
 # Regression: did the composite change since that baseline? Threshold is 0
-node scripts/compare.mjs file.psd --baseline baseline.json --out report.json
+node scripts/compare.mjs file.psd --baseline verification/base.json --out report.json
 
 # Reference: does the composite match an Alpaca Studio export?
 node scripts/compare.mjs file.psd --expected export.png --threshold 2 --out report.json
 ```
+
+### A baseline is the artwork. A report is not
+
+**`--save-baseline` writes the composited image itself**, as a PNG inside the JSON. For a client
+file that is the picture, so a baseline is a local working file: never committed, never shared.
+`verification/` is gitignored for this, and writing a baseline anywhere inside the repository that
+git would track is refused rather than warned about.
+
+A report is the opposite and is built to be shared: no artwork, no layer names, no rectangles.
+Files appear as a hash of their contents, layers as the index `buildLayerTree` assigns.
 
 | Flag | Meaning |
 | --- | --- |

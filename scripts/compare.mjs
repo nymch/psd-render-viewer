@@ -22,6 +22,8 @@
  *   npx playwright install chromium
  */
 import {readFileSync, writeFileSync} from "node:fs";
+import {execFileSync} from "node:child_process";
+import {resolve, sep} from "node:path";
 import {createHash} from "node:crypto";
 import {chromium} from "playwright";
 import {initializeCanvas, readPsd} from "ag-psd";
@@ -294,6 +296,10 @@ const baselinePath = flag("baseline");
 const saveBaselinePath = flag("save-baseline");
 const outPath = flag("out");
 
+// Checked before anything expensive runs, so a bad path fails in a second rather than after a
+// full render
+if (saveBaselinePath !== null) refuseIfCommittable(saveBaselinePath);
+
 const document_ = readLayers(psdPath);
 
 let baselinePng = null;
@@ -328,6 +334,43 @@ const result = await runInPage(
   baselinePng,
 );
 await browser.close();
+
+/**
+ * A baseline embeds the composited image, so it is the artwork.
+ *
+ * Reports are built to be shareable; a baseline is the opposite and only exists to be diffed
+ * against locally. Refusing to write one where git would pick it up is worth more than a line in
+ * the README, because the mistake is silent and the file looks like every other JSON here.
+ */
+function refuseIfCommittable(path) {
+  const full = resolve(path);
+
+  let root;
+  try {
+    root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    return; // Not run from inside a repository, so nothing can be committed by accident
+  }
+
+  // Outside the work tree there is nothing for git to pick up
+  if (full !== root && !full.startsWith(root + sep)) return;
+
+  try {
+    execFileSync("git", ["check-ignore", "-q", full], {stdio: "ignore"});
+    return; // Ignored, so it cannot be committed
+  } catch {
+    // Not ignored
+  }
+
+  console.error(
+    `refusing to write a baseline to ${path}: it is inside the repository and not ignored, ` +
+      `and a baseline contains the composited image itself.\n` +
+      `Write it under verification/, or anywhere outside the repository.`,
+  );
+  process.exit(1);
+}
 
 if (mode === "capture") {
   if (saveBaselinePath === null) {
